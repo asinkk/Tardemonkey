@@ -1,0 +1,28 @@
+name: 台指週選盤面
+
+on:
+  schedule:
+    # 週一到週五 台北時間 21:05（UTC 13:05）
+    - cron: "5 13 * * 1-5"
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: 抓資料並產生頁面
+        run: python txo_report.py
+      - name: 存回 repo
+        run: |
+          git config user.name "txo-bot"
+          git config user.email "txo-bot@users.noreply.github.com"
+          git add docs history
+          git diff --cached --quiet || git commit -m "更新盤面 $(date -u +%F)"
+          git push

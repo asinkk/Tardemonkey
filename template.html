@@ -1,0 +1,304 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>台指週選盤面</title>
+<style>
+  :root {
+    --bg: #f6f7f9; --panel: #ffffff; --fg: #1b1f24; --muted: #5d6673; --line: #dfe3e8;
+    --grid: #eceff3; --axis: #b9c0c9; --ref: #8a93a0; --c: #c2412d; --p: #2f7d5b; --a: #3a5bbf; --mutedline: #c4cad2;
+    --font: "Noto Sans TC", "PingFang TC", "Microsoft JhengHei", system-ui, sans-serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #14171b; --panel: #1c2026; --fg: #e8ebef; --muted: #9aa3ae; --line: #2c323a;
+      --grid: #252a31; --axis: #4a525c; --ref: #7d8692; --c: #ef7a63; --p: #5cc296; --a: #8aa4f2; --mutedline: #46505b; color-scheme: dark; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--fg); font-family: var(--font); font-size: 14px; }
+  .wrap { max-width: 1200px; margin: 0 auto; padding: 24px 16px 48px; display: grid; gap: 20px; }
+  .head { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: flex-end; gap: 12px; }
+  h1 { margin: 0; font-size: 28px; font-weight: 500; }
+  .asof { margin: 4px 0 0; color: var(--muted); font-size: 12px; }
+  select { font: inherit; padding: 6px 10px; border-radius: 6px; border: 1px solid var(--line); background: var(--panel); color: var(--fg); }
+  .take { margin: 0; font-size: 15px; max-width: 70ch; line-height: 1.6; }
+  .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 170px), 1fr)); gap: 12px; }
+  .tile, .card { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; min-width: 0; }
+  .tile { padding: 14px; display: grid; gap: 4px; align-content: start; }
+  .tile h3 { margin: 0; font-size: 12px; font-weight: 500; color: var(--muted); }
+  .big { font-size: 26px; font-variant-numeric: tabular-nums; }
+  .sub { font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 420px), 1fr)); gap: 12px; }
+  .card { padding: 18px; display: grid; gap: 8px; align-content: start; }
+  .wide { grid-column: 1 / -1; }
+  .card h2 { margin: 0; font-size: 16px; font-weight: 500; }
+  .note { margin: 0; font-size: 12px; color: var(--muted); }
+  .legend { display: flex; flex-wrap: wrap; gap: 14px; font-size: 12px; color: var(--muted); }
+  .legend span { display: inline-flex; align-items: center; gap: 5px; }
+  .sw { width: 11px; height: 11px; border-radius: 2px; display: inline-block; }
+  .chart { position: relative; min-height: 240px; }
+  .chart svg { display: block; overflow: visible; }
+  .chart text { fill: var(--muted); font-size: 11px; font-family: var(--font); }
+  .tip { position: absolute; pointer-events: none; background: var(--panel); border: 1px solid var(--line); border-radius: 6px;
+    box-shadow: 0 4px 14px rgba(0,0,0,.15); padding: 6px 9px; font-size: 12px; white-space: nowrap; font-variant-numeric: tabular-nums; z-index: 2; }
+  .tip .k { color: var(--muted); }
+  .tablebox { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; font-size: 12px; font-variant-numeric: tabular-nums; }
+  th, td { padding: 6px 8px; text-align: right; border-bottom: 1px solid var(--line); white-space: nowrap; }
+  th { color: var(--muted); font-weight: 500; }
+  th:first-child, td:first-child { text-align: left; }
+  tr.on td { font-weight: 600; }
+  tbody tr { cursor: pointer; }
+  details { font-size: 12px; color: var(--muted); }
+  summary { cursor: pointer; color: var(--fg); }
+  dl { display: grid; grid-template-columns: max-content 1fr; gap: 4px 14px; }
+  dt { color: var(--fg); } dd { margin: 0; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="head">
+    <div>
+      <h1>台指週選盤面</h1>
+      <p class="asof">報價時點 <span id="qt"></span>（<span id="basis"></span>中價）· 未平倉量截至 <span id="td"></span> 日盤收盤 · 資料來源：台灣期交所 · 產生於 <span id="gen"></span></p>
+    </div>
+    <label>到期 <select id="exp"></select></label>
+  </header>
+
+  <p class="take"><b data-k="label"></b> 預期波動約 ±<b data-k="straddle" data-f="int"></b> 點，區間 <b data-k="range_low" data-f="int"></b>–<b data-k="range_high" data-f="int"></b>。近價最大買權牆在 <b data-k="call_wall" data-f="int"></b>，最大賣權牆在 <b data-k="put_wall" data-f="int"></b>。</p>
+
+  <section class="tiles">
+    <div class="tile"><h3>合成期貨（買賣權平價）</h3><div class="big" data-k="forward" data-f="int"></div><div class="sub">剩 <span data-k="days_left" data-f="d1"></span> 天到期</div></div>
+    <div class="tile"><h3>預期波動（ATM 跨式）</h3><div class="big">±<span data-k="straddle" data-f="int"></span></div><div class="sub">±<span data-k="move_pct" data-f="pct"></span> · 履約價 <span data-k="atm_strike" data-f="int"></span></div></div>
+    <div class="tile"><h3>ATM 隱含波動率</h3><div class="big" data-k="atm_iv" data-f="pct"></div><div class="sub">1σ 約 ±<span data-k="sigma_pts" data-f="int"></span> 點</div></div>
+    <div class="tile"><h3>P/C ratio（未平倉）</h3><div class="big" data-k="pc_oi" data-f="r2"></div><div class="sub">近價 ±2,500 點 <span data-k="pc_oi_near" data-f="r2"></span></div></div>
+    <div class="tile"><h3>P/C ratio（成交量）</h3><div class="big" data-k="pc_vol_live" data-f="r2"></div><div class="sub">即時盤 · 上一交易日 <span data-k="pc_vol_day" data-f="r2"></span></div></div>
+    <div class="tile"><h3>最大痛點</h3><div class="big" data-k="max_pain" data-f="int"></div><div class="sub">買方總價值最小的結算價</div></div>
+  </section>
+
+  <div class="grid">
+    <section class="card wide">
+      <h2>未平倉牆</h2>
+      <p class="note">各履約價未平倉口數，買權在上、賣權在下。灰色區間是 ATM 跨式推算的預期波動範圍。</p>
+      <div class="legend">
+        <span><i class="sw" style="background:var(--c)"></i>買權 OI（壓力）</span>
+        <span><i class="sw" style="background:var(--p)"></i>賣權 OI（支撐）</span>
+        <span><i class="sw" style="background:var(--grid);border:1px solid var(--axis)"></i>預期波動區間</span>
+        <span><i class="sw" style="height:2px;background:var(--fg)"></i>合成期貨</span>
+        <span><i class="sw" style="height:0;border-top:2px dashed var(--ref);border-radius:0"></i>最大痛點</span>
+      </div>
+      <div class="chart" id="oi"></div>
+    </section>
+    <section class="card">
+      <h2>IV 微笑</h2>
+      <p class="note">價外選擇權的隱含波動率。所選到期為彩色，其他到期為灰色。</p>
+      <div class="chart" id="iv"></div>
+    </section>
+    <section class="card">
+      <h2>最大痛點曲線</h2>
+      <p class="note">若在各價位結算，買方持有的選擇權總價值（百萬元，每點 50 元）。最低點即最大痛點。</p>
+      <div class="chart" id="pain"></div>
+    </section>
+    <section class="card">
+      <h2>各到期比較</h2>
+      <p class="note">點一列可切換上方圖表的到期。</p>
+      <div class="tablebox"><table>
+        <thead><tr><th>到期</th><th>剩餘天數</th><th>跨式</th><th>波動%</th><th>ATM IV</th><th>P/C OI</th><th>最大痛點</th></tr></thead>
+        <tbody id="term"></tbody>
+      </table></div>
+    </section>
+    <section class="card">
+      <h2>全市場 P/C ratio 走勢</h2>
+      <p class="note">期交所公布的台指選擇權全部到期合計，近一個月。</p>
+      <div class="legend">
+        <span><i class="sw" style="background:var(--c)"></i>未平倉量 P/C</span>
+        <span><i class="sw" style="background:var(--p)"></i>成交量 P/C</span>
+      </div>
+      <div class="chart" id="pch"></div>
+    </section>
+  </div>
+
+  <details>
+    <summary>計算方式</summary>
+    <dl>
+      <dt>合成期貨</dt><dd>取買權與賣權中價最接近的履約價 K，F = K + C − P。</dd>
+      <dt>預期波動</dt><dd>價平買權加賣權（跨式）價格。</dd>
+      <dt>IV</dt><dd>Black-76 模型、到期日 13:30 為終點，用即時買賣中價反推；夜盤點差較寬，單點可能有雜訊。</dd>
+      <dt>P/C ratio</dt><dd>賣權除以買權。未平倉量用最近日盤收盤數字；成交量 P/C 用即時盤累計。</dd>
+      <dt>最大痛點</dt><dd>以收盤未平倉量計算，所有買方部位價值總和最小的結算價。</dd>
+      <dt>未平倉牆</dt><dd>合成期貨 ±3,000 點內 OI 最大的買權和賣權履約價。</dd>
+    </dl>
+  </details>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
+<script>
+const DATA = /*__DATA__*/null;
+const css = (n) => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const f0 = d3.format(','), f1 = d3.format(',.1f'), fp = d3.format('.1%'), f2 = d3.format('.2f');
+const fmt = (v, k) => v === null || v === undefined ? '—' : k === 'int' ? f0(Math.round(v)) : k === 'd1' ? f1(v) : k === 'pct' ? fp(v) : k === 'r2' ? f2(v) : String(v);
+let curExp = DATA.summary[0] && DATA.summary[0].expiry;
+const cur = () => DATA.summary.find((r) => r.expiry === curExp) || DATA.summary[0];
+
+function tipFor(box) { const t = document.createElement('div'); t.className = 'tip'; t.hidden = true; box.appendChild(t); return t; }
+function showTip(box, t, ev, head, rows) {
+  t.replaceChildren();
+  const h = document.createElement('div'); h.className = 'k'; h.textContent = head; t.appendChild(h);
+  rows.forEach(([c, n, v]) => { const d = document.createElement('div');
+    if (c) { const s = document.createElement('i'); s.className = 'sw'; s.style.background = c; s.style.marginRight = '4px'; d.appendChild(s); }
+    d.appendChild(document.createTextNode(n + ' ' + v)); t.appendChild(d); });
+  t.hidden = false;
+  const rb = box.getBoundingClientRect(); const px = ev.clientX - rb.left, py = ev.clientY - rb.top;
+  let left = px + 12; if (left + t.offsetWidth > box.clientWidth) left = Math.max(0, px - t.offsetWidth - 12);
+  t.style.left = left + 'px'; t.style.top = Math.max(0, py - 10) + 'px';
+}
+function frame(box, H, yScale, yFmt, ticks) {
+  box.replaceChildren();
+  const W = Math.max(300, box.clientWidth);
+  const svg = d3.select(box).append('svg').attr('width', '100%').attr('viewBox', `0 0 ${W} ${H}`);
+  const ya = svg.append('g').call(d3.axisLeft(yScale).ticks(ticks).tickFormat(yFmt).tickSize(0)).attr('font-size', null).attr('font-family', null);
+  ya.select('.domain').remove();
+  let ml = 0; ya.selectAll('text').each(function () { ml = Math.max(ml, this.getComputedTextLength()); }); ml += 10;
+  ya.attr('transform', `translate(${ml - 4},0)`);
+  return { svg, W, ml };
+}
+function grid(svg, y, ticks, x0, x1) {
+  svg.insert('g', ':first-child').selectAll('line').data(y.ticks(ticks)).join('line')
+    .attr('x1', x0).attr('x2', x1).attr('y1', (v) => y(v)).attr('y2', (v) => y(v)).attr('stroke', css('--grid'));
+}
+function xAxis(svg, x, H, mb, vals, f) {
+  svg.append('g').attr('transform', `translate(0,${H - mb})`).call(d3.axisBottom(x).tickValues(vals).tickFormat(f).tickSize(4))
+    .attr('font-size', null).attr('font-family', null)
+    .call((g) => g.select('.domain').attr('stroke', css('--axis'))).call((g) => g.selectAll('line').attr('stroke', css('--axis')));
+}
+const strikeTicks = (k0, k1, W) => { const s = W < 700 ? 1000 : 500; return d3.range(Math.ceil(k0 / s) * s, k1 + 1, s); };
+
+function drawText() {
+  const r = cur();
+  document.querySelectorAll('[data-k]').forEach((el) => { el.textContent = fmt(r[el.dataset.k], el.dataset.f); });
+  document.getElementById('qt').textContent = r.quote_time;
+  document.getElementById('basis').textContent = r.price_basis;
+  document.getElementById('td').textContent = r.trade_date;
+  document.getElementById('gen').textContent = DATA.generated;
+  const sel = document.getElementById('exp');
+  sel.replaceChildren(...DATA.summary.map((s) => new Option(s.label, s.expiry))); sel.value = r.expiry;
+  const tb = document.getElementById('term'); tb.replaceChildren();
+  DATA.summary.forEach((d) => { const tr = document.createElement('tr'); tr.dataset.key = d.expiry; if (d.expiry === r.expiry) tr.className = 'on';
+    [d.label, fmt(d.days_left, 'd1'), fmt(d.straddle, 'int'), fmt(d.move_pct, 'pct'), fmt(d.atm_iv, 'pct'), fmt(d.pc_oi, 'r2'), fmt(d.max_pain, 'int')]
+      .forEach((v) => { const td = document.createElement('td'); td.textContent = v; tr.appendChild(td); }); tb.appendChild(tr); });
+}
+
+function drawOI() {
+  const box = document.getElementById('oi'), r = cur(), H = 300, mb = 26;
+  const rows = DATA.strikes.filter((d) => d.expiry === r.expiry).sort((a, b) => a.strike - b.strike);
+  if (!rows.length) { box.textContent = '—'; return; }
+  const maxOI = d3.max(rows, (d) => Math.max(d.call_oi, d.put_oi)) || 1;
+  const y = d3.scaleLinear([-maxOI, maxOI], [H - mb, 8]).nice();
+  const { svg, W, ml } = frame(box, H, y, (v) => f0(Math.abs(v)), 6);
+  const k0 = rows[0].strike, k1 = rows[rows.length - 1].strike;
+  const x = d3.scaleLinear([k0 - 25, k1 + 25], [ml, W - 8]);
+  const bw = Math.max(1, (x(k0 + 50) - x(k0)) * 0.8);
+  grid(svg, y, 6, ml, W - 8);
+  const lo = Math.max(r.range_low, k0 - 25), hi = Math.min(r.range_high, k1 + 25);
+  if (hi > lo) svg.append('rect').attr('x', x(lo)).attr('width', x(hi) - x(lo)).attr('y', 8).attr('height', H - mb - 8).attr('fill', css('--grid')).attr('opacity', 0.8);
+  svg.append('g').selectAll('rect').data(rows).join('rect').attr('x', (d) => x(d.strike) - bw / 2).attr('width', bw)
+    .attr('y', (d) => y(d.call_oi)).attr('height', (d) => y(0) - y(d.call_oi)).attr('fill', css('--c')).attr('rx', Math.min(2, bw / 2));
+  svg.append('g').selectAll('rect').data(rows).join('rect').attr('x', (d) => x(d.strike) - bw / 2).attr('width', bw)
+    .attr('y', y(0)).attr('height', (d) => y(-d.put_oi) - y(0)).attr('fill', css('--p')).attr('rx', Math.min(2, bw / 2));
+  svg.append('line').attr('x1', ml).attr('x2', W - 8).attr('y1', y(0)).attr('y2', y(0)).attr('stroke', css('--axis'));
+  svg.append('line').attr('x1', x(r.forward)).attr('x2', x(r.forward)).attr('y1', 8).attr('y2', H - mb).attr('stroke', css('--fg')).attr('stroke-width', 1.5);
+  if (r.max_pain >= k0 && r.max_pain <= k1) svg.append('line').attr('x1', x(r.max_pain)).attr('x2', x(r.max_pain)).attr('y1', 8).attr('y2', H - mb)
+    .attr('stroke', css('--ref')).attr('stroke-width', 1.5).attr('stroke-dasharray', '4 3');
+  xAxis(svg, x, H, mb, strikeTicks(k0, k1, W), f0);
+  const t = tipFor(box), hl = svg.append('rect').attr('fill', 'none').attr('stroke', css('--fg')).attr('visibility', 'hidden');
+  svg.append('rect').attr('x', ml).attr('width', W - 8 - ml).attr('height', H).attr('fill', 'transparent')
+    .on('mousemove', (ev) => { const k = x.invert(d3.pointer(ev)[0]);
+      const d = rows.reduce((a, b) => (Math.abs(b.strike - k) < Math.abs(a.strike - k) ? b : a));
+      hl.attr('visibility', 'visible').attr('x', x(d.strike) - bw / 2 - 1).attr('width', bw + 2).attr('y', 8).attr('height', H - mb - 8);
+      showTip(box, t, ev, '履約價 ' + f0(d.strike), [[css('--c'), '買權 OI', f0(d.call_oi)], [css('--p'), '賣權 OI', f0(d.put_oi)]]); })
+    .on('mouseleave', () => { t.hidden = true; hl.attr('visibility', 'hidden'); });
+}
+
+function drawIV() {
+  const box = document.getElementById('iv'), r = cur(), H = 300, mb = 26;
+  const all = DATA.strikes.filter((d) => d.otm_iv);
+  const byExp = d3.group(all, (d) => d.expiry);
+  const sel = (byExp.get(r.expiry) || []).sort((a, b) => a.strike - b.strike);
+  if (!sel.length) { box.textContent = '—'; return; }
+  const y = d3.scaleLinear(d3.extent(all, (d) => d.otm_iv), [H - mb, 8]).nice();
+  const { svg, W, ml } = frame(box, H, y, d3.format('.0%'), 5);
+  const x = d3.scaleLinear(d3.extent(all, (d) => d.strike), [ml, W - 8]);
+  grid(svg, y, 5, ml, W - 8);
+  const ln = d3.line().x((d) => x(d.strike)).y((d) => y(d.otm_iv));
+  byExp.forEach((rows, e) => { if (e !== r.expiry) svg.append('path').datum(rows.sort((a, b) => a.strike - b.strike)).attr('d', ln)
+    .attr('fill', 'none').attr('stroke', css('--mutedline')).attr('stroke-width', 1.5).attr('stroke-linejoin', 'round'); });
+  svg.append('line').attr('x1', x(r.forward)).attr('x2', x(r.forward)).attr('y1', 8).attr('y2', H - mb).attr('stroke', css('--ref')).attr('stroke-dasharray', '4 3');
+  svg.append('path').datum(sel).attr('d', ln).attr('fill', 'none').attr('stroke', css('--a')).attr('stroke-width', 2).attr('stroke-linejoin', 'round').attr('stroke-linecap', 'round');
+  const [k0, k1] = x.domain(); xAxis(svg, x, H, mb, strikeTicks(k0, k1, W < 420 ? 400 : W), f0);
+  const t = tipFor(box), dot = svg.append('circle').attr('r', 4).attr('fill', css('--a')).attr('visibility', 'hidden');
+  svg.append('rect').attr('x', ml).attr('width', W - 8 - ml).attr('height', H).attr('fill', 'transparent')
+    .on('mousemove', (ev) => { const k = x.invert(d3.pointer(ev)[0]);
+      const d = sel.reduce((a, b) => (Math.abs(b.strike - k) < Math.abs(a.strike - k) ? b : a));
+      dot.attr('visibility', 'visible').attr('cx', x(d.strike)).attr('cy', y(d.otm_iv));
+      showTip(box, t, ev, '履約價 ' + f0(d.strike), [[null, d.strike >= r.forward ? '買權 IV' : '賣權 IV', fp(d.otm_iv)]]); })
+    .on('mouseleave', () => { t.hidden = true; dot.attr('visibility', 'hidden'); });
+}
+
+function drawPain() {
+  const box = document.getElementById('pain'), r = cur(), H = 300, mb = 26;
+  const rows = DATA.pain.filter((d) => d.expiry === r.expiry).sort((a, b) => a.settle - b.settle);
+  if (!rows.length) { box.textContent = '—'; return; }
+  const y = d3.scaleLinear([0, d3.max(rows, (d) => d.payout)], [H - mb, 14]).nice();
+  const { svg, W, ml } = frame(box, H, y, f0, 5);
+  const x = d3.scaleLinear(d3.extent(rows, (d) => d.settle), [ml, W - 8]);
+  grid(svg, y, 5, ml, W - 8);
+  svg.append('path').datum(rows).attr('d', d3.line().x((d) => x(d.settle)).y((d) => y(d.payout))).attr('fill', 'none').attr('stroke', css('--a')).attr('stroke-width', 2);
+  svg.append('line').attr('x1', x(r.forward)).attr('x2', x(r.forward)).attr('y1', 14).attr('y2', H - mb).attr('stroke', css('--fg')).attr('stroke-width', 1.5);
+  const mp = rows.find((d) => d.settle === r.max_pain);
+  if (mp) svg.append('circle').attr('cx', x(mp.settle)).attr('cy', y(mp.payout)).attr('r', 5).attr('fill', css('--a'));
+  const [k0, k1] = x.domain(); xAxis(svg, x, H, mb, strikeTicks(k0, k1, W < 420 ? 400 : W), f0);
+  const t = tipFor(box), dot = svg.append('circle').attr('r', 4).attr('fill', css('--a')).attr('visibility', 'hidden');
+  svg.append('rect').attr('x', ml).attr('width', W - 8 - ml).attr('height', H).attr('fill', 'transparent')
+    .on('mousemove', (ev) => { const k = x.invert(d3.pointer(ev)[0]);
+      const d = rows.reduce((a, b) => (Math.abs(b.settle - k) < Math.abs(a.settle - k) ? b : a));
+      dot.attr('visibility', 'visible').attr('cx', x(d.settle)).attr('cy', y(d.payout));
+      showTip(box, t, ev, '結算於 ' + f0(d.settle), [[null, '買方總價值', d3.format(',.0f')(d.payout) + ' 百萬元']]); })
+    .on('mouseleave', () => { t.hidden = true; dot.attr('visibility', 'hidden'); });
+}
+
+function drawPCH() {
+  const box = document.getElementById('pch'), H = 240, mb = 26;
+  const rows = DATA.pc_history.map((d) => ({ ...d, dt: new Date(d.date) })).sort((a, b) => a.dt - b.dt);
+  if (!rows.length) { box.textContent = '—'; return; }
+  const y = d3.scaleLinear([0, d3.max(rows, (d) => Math.max(d.pc_oi, d.pc_vol))], [H - mb, 10]).nice();
+  const { svg, W, ml } = frame(box, H, y, d3.format('.1f'), 5);
+  const mr = 40, x = d3.scaleUtc(d3.extent(rows, (d) => d.dt), [ml, W - mr]);
+  grid(svg, y, 5, ml, W - mr);
+  svg.append('line').attr('x1', ml).attr('x2', W - mr).attr('y1', y(1)).attr('y2', y(1)).attr('stroke', css('--ref')).attr('stroke-dasharray', '4 3');
+  const last = rows[rows.length - 1];
+  const series = [['pc_oi', css('--c'), '未平倉量 P/C'], ['pc_vol', css('--p'), '成交量 P/C']];
+  const ends = series.map(([k, c]) => { svg.append('path').datum(rows).attr('d', d3.line().x((d) => x(d.dt)).y((d) => y(d[k])))
+    .attr('fill', 'none').attr('stroke', c).attr('stroke-width', 2).attr('stroke-linejoin', 'round');
+    svg.append('circle').attr('cx', x(last.dt)).attr('cy', y(last[k])).attr('r', 3.5).attr('fill', c); return { k, c, y: y(last[k]) }; });
+  if (Math.abs(ends[0].y - ends[1].y) < 14) { const m = (ends[0].y + ends[1].y) / 2, u = ends[0].y <= ends[1].y ? 0 : 1; ends[u].y = m - 7; ends[1 - u].y = m + 7; }
+  ends.forEach((e) => svg.append('text').attr('x', x(last.dt) + 6).attr('y', e.y).attr('dy', '0.35em').style('fill', e.c).text(f2(last[e.k])));
+  svg.append('g').attr('transform', `translate(0,${H - mb})`).call(d3.axisBottom(x).ticks(W < 420 ? 3 : 5).tickFormat(d3.utcFormat('%-m/%-d')).tickSize(4))
+    .attr('font-size', null).attr('font-family', null).call((g) => g.select('.domain').attr('stroke', css('--axis'))).call((g) => g.selectAll('line').attr('stroke', css('--axis')));
+  const t = tipFor(box), rule = svg.append('line').attr('y1', 10).attr('y2', H - mb).attr('stroke', css('--axis')).attr('visibility', 'hidden');
+  svg.append('rect').attr('x', ml).attr('width', W - mr - ml).attr('height', H).attr('fill', 'transparent')
+    .on('mousemove', (ev) => { const tx = x.invert(d3.pointer(ev)[0]);
+      const d = rows.reduce((a, b) => (Math.abs(b.dt - tx) < Math.abs(a.dt - tx) ? b : a));
+      rule.attr('visibility', 'visible').attr('x1', x(d.dt)).attr('x2', x(d.dt));
+      showTip(box, t, ev, d.date, series.map(([k, c, n]) => [c, n, f2(d[k])])); })
+    .on('mouseleave', () => { t.hidden = true; rule.attr('visibility', 'hidden'); });
+}
+
+function drawAll() { if (!DATA.summary.length) return; drawText(); drawOI(); drawIV(); drawPain(); drawPCH(); }
+document.getElementById('exp').addEventListener('change', (e) => { curExp = e.target.value; drawAll(); });
+document.getElementById('term').addEventListener('click', (e) => { const tr = e.target.closest('tr[data-key]'); if (tr) { curExp = tr.dataset.key; drawAll(); } });
+let rz; window.addEventListener('resize', () => { clearTimeout(rz); rz = setTimeout(drawAll, 150); });
+window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', drawAll);
+drawAll();
+</script>
+</body>
+</html>
