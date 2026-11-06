@@ -2,7 +2,7 @@ name: 編譯 Windows EXE
 on:
   workflow_dispatch: {}
   push:
-    paths: ["txo_data.py", "txo_report.py", "template.html"]
+    paths: ["txo_data.py", "txo_extra.py", "txo_report.py", "template.html"]
 permissions:
   contents: write
 jobs:

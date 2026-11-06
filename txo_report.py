@@ -10,6 +10,7 @@ import argparse, datetime as dt, json, os, sys, tempfile
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 import txo_data  # noqa: E402
+import txo_extra  # noqa: E402
 
 FROZEN = getattr(sys, "frozen", False)  # 打包成 EXE 時為 True
 RES = getattr(sys, "_MEIPASS", HERE)      # template.html 所在位置
@@ -33,6 +34,7 @@ def main():
         sys.exit("沒有抓到任何到期的資料，未更新頁面。")
     now = dt.datetime.now(dt.timezone(dt.timedelta(hours=8)))
     data["generated"] = now.strftime("%Y-%m-%d %H:%M")
+    data["extra"] = txo_extra.extra(a.history or BASE, data["summary"][0].get("atm_iv"))
 
     payload = json.dumps(data, ensure_ascii=False).replace("</", "<\\/")
     html = open(os.path.join(RES, "template.html"), encoding="utf-8").read()

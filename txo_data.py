@@ -61,6 +61,12 @@ def main(out):
     rows = [r for r in csv.reader(io.StringIO(raw.decode("big5", "replace"))) if len(r) > 20 and r[1] == "TXO"]
     trade_date = max(r[0] for r in rows)
     day = [r for r in rows if r[0] == trade_date]
+    prev_dates = sorted({r[0] for r in rows if r[0] < trade_date})
+    prev_date = prev_dates[-1] if prev_dates else None
+    prev_oi = {}
+    for r in rows:
+        if r[0] == prev_date and r[17] == "一般":
+            prev_oi[(r[2].strip(), int(float(r[3])), "C" if r[4] == "買權" else "P")] = int(r[11] or 0)
     td = dt.datetime.strptime(trade_date, "%Y/%m/%d").date()
 
     # contracts still alive after trade date
@@ -152,6 +158,7 @@ def main(out):
             "pc_vol_live": round(lv_p / lv_c, 3) if lv_c else None,
             "max_pain": max_pain, "call_wall": call_wall[1], "call_wall_oi": call_wall[0],
             "put_wall": put_wall[1], "put_wall_oi": put_wall[0],
+            "oi_prev_date": prev_date.replace("/", "-") if prev_date else None,
         })
         for K in Ks:
             if abs(K - F) > 3000: continue
@@ -164,6 +171,8 @@ def main(out):
                 "call_iv": round(civ, 4) if civ else None, "put_iv": round(piv, 4) if piv else None,
                 "otm_iv": round(otm, 4) if otm else None,
                 "call_vol": vol.get((K, "C"), 0), "put_vol": vol.get((K, "P"), 0),
+                "call_oi_chg": oi.get((K, "C"), 0) - prev_oi.get((code, K, "C"), 0) if prev_oi else None,
+                "put_oi_chg": oi.get((K, "P"), 0) - prev_oi.get((code, K, "P"), 0) if prev_oi else None,
             })
         for S in allK:
             if abs(S - F) <= 3000:
