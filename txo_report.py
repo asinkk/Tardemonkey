@@ -38,6 +38,16 @@ def main():
 
     hm = now.hour * 100 + now.minute
     at_close = 1340 <= hm < 1500 or 430 <= hm < 530
+    # 給 Google 試算表 IMPORTDATA 用的 CSV
+    import csv as _csv
+    outdir = os.path.dirname(os.path.abspath(a.out))
+    for k in ("summary", "strikes", "pain", "pc_history"):
+        rows = data[k]
+        if not rows: continue
+        with open(os.path.join(outdir, k + ".csv"), "w", encoding="utf-8", newline="") as f:
+            w = _csv.DictWriter(f, fieldnames=list(rows[0].keys()))
+            w.writeheader(); w.writerows(rows)
+
     if a.history and (at_close or not a.history_at_close):
         os.makedirs(a.history, exist_ok=True)
         with open(os.path.join(a.history, now.strftime("%Y-%m-%d_%H%M") + ".json"), "w", encoding="utf-8") as f:
