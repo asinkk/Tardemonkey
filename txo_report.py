@@ -11,11 +11,16 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 import txo_data  # noqa: E402
 
+FROZEN = getattr(sys, "frozen", False)  # 打包成 EXE 時為 True
+RES = getattr(sys, "_MEIPASS", HERE)      # template.html 所在位置
+BASE = os.path.dirname(sys.executable) if FROZEN else HERE  # 輸出檔放在 EXE 旁邊
+
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("-o", "--out", default=os.path.join(HERE, "docs", "index.html"))
-    ap.add_argument("--history", default=os.path.join(HERE, "history"), help="資料存檔資料夾，給空字串則不存")
+    ap.add_argument("-o", "--out", default=os.path.join(BASE, "docs", "index.html"))
+    ap.add_argument("--history", default=os.path.join(BASE, "history"), help="資料存檔資料夾，給空字串則不存")
+    ap.add_argument("--no-open", action="store_true", help="EXE 版預設跑完會打開瀏覽器；排程執行時加這個參數")
     ap.add_argument("--history-at-close", action="store_true",
                     help="只在日盤收盤後（13:40–15:00）與夜盤收盤前後（04:30–05:30）存檔，避免每半小時都存")
     a = ap.parse_args()
@@ -30,7 +35,7 @@ def main():
     data["generated"] = now.strftime("%Y-%m-%d %H:%M")
 
     payload = json.dumps(data, ensure_ascii=False).replace("</", "<\\/")
-    html = open(os.path.join(HERE, "template.html"), encoding="utf-8").read()
+    html = open(os.path.join(RES, "template.html"), encoding="utf-8").read()
     html = html.replace("/*__DATA__*/null", payload)
     os.makedirs(os.path.dirname(os.path.abspath(a.out)), exist_ok=True)
     with open(a.out, "w", encoding="utf-8") as f:
@@ -56,7 +61,24 @@ def main():
     print(f"已輸出 {a.out}")
     print(f"{s['label']}：合成期貨 {s['forward']:,.0f}，預期波動 ±{s['straddle']:,.0f}（{s['range_low']:,}–{s['range_high']:,}），"
           f"ATM IV {s['atm_iv']:.1%}，P/C(OI) {s['pc_oi']}，最大痛點 {s['max_pain']:,}")
+    if FROZEN and not a.no_open:
+        import webbrowser
+        webbrowser.open("file:///" + os.path.abspath(a.out).replace(os.sep, "/"))
 
 
 if __name__ == "__main__":
-    main()
+    if FROZEN:
+        for stream in (sys.stdout, sys.stderr):
+            try:
+                stream.reconfigure(errors="replace")  # Windows 主控台遇到無法顯示的字元不要當掉
+            except Exception:
+                pass
+    try:
+        main()
+    except SystemExit:
+        raise
+    except Exception as e:  # 雙擊執行時讓視窗停住，才看得到錯誤
+        if FROZEN and "--no-open" not in sys.argv:
+            print("執行失敗：", repr(e))
+            input("按 Enter 關閉視窗…")
+        raise

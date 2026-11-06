@@ -1,0 +1,26 @@
+name: 編譯 Windows EXE
+on:
+  workflow_dispatch: {}
+  push:
+    paths: ["txo_data.py", "txo_report.py", "template.html"]
+permissions:
+  contents: write
+jobs:
+  build:
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.12"}
+      - name: PyInstaller
+        run: |
+          pip install pyinstaller
+          pyinstaller --onefile --name txo_report --add-data "template.html;." txo_report.py
+      - name: 發佈到 Release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release delete exe-latest -y --cleanup-tag || true
+          gh release create exe-latest dist/txo_report.exe --title "txo_report.exe（Windows）" --notes "雙擊執行：抓期交所資料並在瀏覽器開啟盤面。排程用 txo_report.exe --no-open。" --latest
