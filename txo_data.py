@@ -85,7 +85,10 @@ def main(out):
                 oi[k] = int(r[11] or 0); settle[k] = num(r[10])
         # live quotes: try night (1) then day (0)
         live, quote_time, session = {}, None, None
-        for mt, name in (("1", "夜盤"), ("0", "日盤")):
+        hm = now.hour * 100 + now.minute
+        day_first = 845 <= hm < 1400  # 日盤時段先用日盤報價，其餘先用夜盤
+        order = (("0", "日盤"), ("1", "夜盤")) if day_first else (("1", "夜盤"), ("0", "日盤"))
+        for mt, name in order:
             try:
                 d = json.loads(post("https://mis.taifex.com.tw/futures/api/getQuoteListOption",
                                     {"MarketType": mt, "SymbolType": "O", "KindID": "1", "CID": "TXO", "ExpireMonth": code,

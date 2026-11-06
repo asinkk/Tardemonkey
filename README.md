@@ -36,7 +36,7 @@ python3 txo_report.py
 2. 把這個資料夾全部上傳到 repo 根目錄（包含 `.github` 資料夾）。
 3. repo 的 Settings → Pages → Source 選「Deploy from a branch」，branch 選 `main`，資料夾選 `/docs`。
 4. Actions 分頁 → 選「台指週選盤面」→ Run workflow，先手動跑一次。
-5. 之後每個交易日台北時間約 21:05 自動更新，網址是 `https://<你的帳號>.github.io/<repo 名稱>/`。
+5. 之後交易日每半小時自動更新：日盤 08:45–13:45、夜盤 15:15–隔天 04:45（台北時間）。網址是 `https://<你的帳號>.github.io/<repo 名稱>/`。history/ 只在日盤收盤後與夜盤收盤時各存一份。
 
 GitHub 的排程常會延遲 5 到 30 分鐘。GitHub 主機在國外，如果期交所擋了海外連線就會失敗（目前測試可以連）。
 

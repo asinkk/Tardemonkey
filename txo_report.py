@@ -15,7 +15,9 @@ import txo_data  # noqa: E402
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("-o", "--out", default=os.path.join(HERE, "docs", "index.html"))
-    ap.add_argument("--history", default=os.path.join(HERE, "history"), help="每次資料的存檔資料夾，給空字串則不存")
+    ap.add_argument("--history", default=os.path.join(HERE, "history"), help="資料存檔資料夾，給空字串則不存")
+    ap.add_argument("--history-at-close", action="store_true",
+                    help="只在日盤收盤後（13:40–15:00）與夜盤收盤前後（04:30–05:30）存檔，避免每半小時都存")
     a = ap.parse_args()
 
     with tempfile.TemporaryDirectory() as tmp:
@@ -34,7 +36,9 @@ def main():
     with open(a.out, "w", encoding="utf-8") as f:
         f.write(html)
 
-    if a.history:
+    hm = now.hour * 100 + now.minute
+    at_close = 1340 <= hm < 1500 or 430 <= hm < 530
+    if a.history and (at_close or not a.history_at_close):
         os.makedirs(a.history, exist_ok=True)
         with open(os.path.join(a.history, now.strftime("%Y-%m-%d_%H%M") + ".json"), "w", encoding="utf-8") as f:
             json.dump(data, f, ensure_ascii=False)
