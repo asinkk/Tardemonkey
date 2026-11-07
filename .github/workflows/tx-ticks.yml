@@ -1,0 +1,39 @@
+name: 累積台指期 1 分K
+
+on:
+  schedule:
+    # 台北時間週一到週六 06:30（夜盤收盤後）。期交所只保留 30 個交易日，所以每天存一次。
+    - cron: "30 22 * * 0-5"
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+concurrency:
+  group: txo-update
+  cancel-in-progress: false
+
+jobs:
+  collect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: 下載期交所每筆成交並轉成 1 分K
+        run: python strategy/collect_ticks.py history/tx_1min
+      - name: 更新加權指數 60 分K（Yahoo）
+        run: python strategy/fetch_twii.py history/twii_60min.csv || echo "Yahoo 抓取失敗，略過"
+      - name: v3 前測（模擬交易紀錄與網頁）
+        run: cd strategy && python forward.py ../history/tx_1min ../docs/strategy.html ../history/forward_trades.csv
+      - name: 存回 repo
+        run: |
+          git config user.name "txo-bot"
+          git config user.email "txo-bot@users.noreply.github.com"
+          git add history/tx_1min history/twii_60min.csv history/forward_trades.csv docs/strategy.html
+          git diff --cached --quiet && exit 0
+          git commit -m "累積台指期 1 分K $(TZ=Asia/Taipei date '+%F')"
+          git pull --rebase origin main
+          git push
