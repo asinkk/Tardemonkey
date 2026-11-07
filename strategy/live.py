@@ -19,6 +19,7 @@ from build_bars import build
 from backtest import load, indicators, tx_revised, us_dst, COST
 import v3, daily
 import trades_page
+import collect_ticks
 
 MIS = "https://mis.taifex.com.tw/futures/api/"
 MONTHS = "ABCDEFGHIJKL"
@@ -119,6 +120,41 @@ def merged_dir(src, sessions):
         front = max(by_contract, key=lambda x: len(by_contract[x]))
         added += sum(1 for c, *_ in rows if c == front)
     return tmp, last, added
+
+
+def fmt_lag(m):
+    m = max(0, round(m))
+    return f"{m} 分鐘" if m < 120 else f"{m // 60} 小時 {m % 60} 分" if m < 2880 else f"{m // 1440} 天"
+
+
+# ---------- 資料缺口 ----------
+def history_last(src):
+    files = sorted(glob.glob(os.path.join(src, "Daily_*.csv")))
+    last = None
+    for f in files[-2:]:
+        for r in csv.DictReader(open(f, encoding="utf-8")):
+            t = dt.datetime.strptime(r["date"] + r["time"], "%Y%m%d%H%M")
+            last = t if last is None or t > last else last
+    return last
+
+
+def find_gap(hist_last, sessions, now):
+    """應該開盤卻沒有資料的盤別開始時間：history 最後一分鐘到即時資料第一分鐘之間，以及即時資料最後一分鐘到現在之間。
+    只看平日 08:45 日盤、15:00 夜盤，不知道國定假日，所以假日會被當成缺口（補抓時期交所沒有檔案，只會留下提示）。"""
+    def expected(a, b):
+        out, d = [], a.date()
+        while d <= b.date():
+            if d.weekday() < 5:
+                for hm in (dt.time(8, 45), dt.time(15, 0)):
+                    st = dt.datetime.combine(d, hm)
+                    if a < st <= b - dt.timedelta(minutes=5):
+                        out.append(st)
+            d += dt.timedelta(days=1)
+        return out
+    new = [t for _, bc in sessions for bars in bc.values() for t in bars if t > hist_last]
+    if not new:
+        return expected(hist_last, now)
+    return expected(hist_last, min(new)) + expected(max(new), now)   # 中間缺的盤＋現在這盤即時資料沒出來
 
 
 # ---------- K 棒 ----------
@@ -383,6 +419,20 @@ def main():
 
     now = dt.datetime.strptime(a.now, "%Y-%m-%dT%H:%M") if a.now else now_tpe()
     sessions, info = ([], {}) if a.offline else fetch_live(now)
+    # 06:30 的存檔漏跑時，期交所即時 1 分K 只留最近一個日盤、一個夜盤，中間會缺。這時先去期交所補抓每日成交檔。
+    gap = find_gap(history_last(a.src), sessions, now)
+    if gap and not a.offline:
+        print("資料缺口", [f"{g:%m-%d %H:%M}" for g in gap], "→ 補抓期交所每日成交")
+        try:
+            collect_ticks.collect(a.src, refresh=0)
+        except Exception as e:
+            print("補抓失敗", e)
+        gap = find_gap(history_last(a.src), sessions, now)
+    prev_gen = None
+    try:
+        prev_gen = dt.datetime.strptime(json.load(open(os.path.join(a.out, "live.json"), encoding="utf-8"))["generated"], "%Y-%m-%d %H:%M")
+    except Exception:
+        pass
     tmp, hist_last, added = merged_dir(a.src, sessions)
     try:
         rows = build(tmp, verbose=False)
@@ -443,7 +493,27 @@ def main():
         if not x:
             return None
         return {"side": "多" if x["side"] > 0 else "空", "kind": x["kind"], "entry": round(x["entry"]),
-                "stop": round(x["stop0"]), "R": round(x["R"])}
+                "stop": round(x["stop0"]), "R": round(x["R"]), "at": f"{sig_time(x, res is hv):%m-%d %H:%M}",
+                "lag": max(0, round((now - sig_time(x, res is hv)).total_seconds() / 60))}
+
+    def sig_time(x, is_v3):
+        """訊號確認（K 棒收完）的時間：v3 = 訊號 60 分K 的結束；D2 = 當天 13:45 收盤。"""
+        return x["t"] + dt.timedelta(minutes=60) if is_v3 else dt.datetime.combine(x["t"].date(), dt.time(13, 45))
+
+    def events(res, is_v3):
+        """上一次網頁更新之後發生的進出場（排程延誤或漏跑時，中間發生的事會在這裡補講）。"""
+        if not prev_gen:
+            return []
+        out = []
+        for x in res["trades"]:
+            side = "多" if x["side"] > 0 else "空"
+            if x["entry_t"] > prev_gen:
+                st = sig_time(x, is_v3)
+                out.append(f"{x['entry_t']:%m-%d %H:%M} {side}單進場 {x['entry']:,.0f}（訊號 {st:%m-%d %H:%M} 成立，"
+                           f"網頁 {now:%m-%d %H:%M} 才更新到，晚了 {fmt_lag((now - st).total_seconds() / 60)}）")
+            if not x["open"] and x["exit_t"] > prev_gen:
+                out.append(f"{x['exit_t']:%m-%d %H:%M} {side}單出場 {x['exit']:,.0f}（{why_text(x)}）")
+        return out
 
     def rec(res):
         tr = [trade_row(x, last_c) for x in res["trades"]]
@@ -456,15 +526,16 @@ def main():
         return {"forward": fwd, "backtest": bt, "fsum": summ(fwd), "bsum": summ(bt)}
 
     data = {
-        "generated": f"{now:%Y-%m-%d %H:%M}",
+        "generated": f"{now:%Y-%m-%d %H:%M}", "prev_generated": f"{prev_gen:%Y-%m-%d %H:%M}" if prev_gen else "",
+        "gap": [f"{g:%m-%d %H:%M}" for g in gap],
         "last_price": last_c, "history_last": f"{hist_last:%Y-%m-%d %H:%M}", "live_minutes_added": added, "live": info,
         "v3": {"bar": f"{T[-1]:%Y-%m-%d %H:%M}", "bar_end": f"{v3_end:%H:%M}", "forming": v3_forming,
-               "pos": pos_info(hv, "v3"), "sig": sig_info(hv), "checks": v3c, "record": rec(hv),
+               "pos": pos_info(hv, "v3"), "sig": sig_info(hv), "checks": v3c, "record": rec(hv), "events": events(hv, True),
                "levels": {k: round(hv["ind"][k][-1]) for k in ("E20", "E60", "ATR")} |
                          {"BBU": round(hv["ind"]["MID"][-1] + 2 * hv["ind"]["SD"][-1]),
                           "BBL": round(hv["ind"]["MID"][-1] - 2 * hv["ind"]["SD"][-1])}},
         "d2": {"bar": f"{dlast:%Y-%m-%d}", "forming": d_forming,
-               "pos": pos_info(hd, "d2"), "sig": sig_info(hd), "checks": d2c, "record": rec(hd),
+               "pos": pos_info(hd, "d2"), "sig": sig_info(hd), "checks": d2c, "record": rec(hd), "events": events(hd, False),
                "levels": {k: round(hd["ind"][k][-1]) for k in ("E20", "E60", "ATR")},
                "bar_ohlc": [round(sp[k][-1]) for k in range(1, 5)]},
     }
@@ -520,7 +591,7 @@ def checks_html(chk):
     return "".join(out)
 
 
-def strat_card(name, sub, s, kind, last_c, now):
+def strat_card(name, sub, s, kind, last_c, now, prev_gen_txt=""):
     pos, sig = s["pos"], s["sig"]
     if kind == "v3":
         bar_txt = (f"最後一根 60 分K：{s['bar'][5:]} 起{'，形成中（' + s['bar_end'] + ' 收）' if s['forming'] else '，已收完'}")
@@ -546,9 +617,12 @@ def strat_card(name, sub, s, kind, last_c, now):
             when = "下一根 60 分K 開盤進場"
         else:
             when = "13:45 收盤前進場" if s["forming"] else "應已在 13:45 收盤前進場"
-        tag = "形成中：若以現價收K" if s["forming"] else "訊號成立"
+        tag = "形成中：若以現價收K" if s["forming"] else f"訊號 {sig['at']} 成立" + (f"（網頁晚了 {fmt_lag(sig['lag'])}才更新到）" if sig["lag"] > 10 else "")
         body = (f'<p class="alert sig">● {tag}，做{sig["side"]}（{esc(sig["kind"])}）→ {when}，'
                 f'參考價 {sig["entry"]:,}、停損 {sig["stop"]:,}（{sig["R"]:,} 點）</p>') + body
+    if s.get("events"):
+        prev = f"上次更新（{esc(prev_gen_txt)}）之後" if prev_gen_txt else "上次更新之後"
+        body = f'<p class="alert">{prev}：<br>' + "<br>".join(esc(e) for e in s["events"]) + "</p>" + body
     lv = s["levels"]
     if kind == "v3":
         lv_txt = f"EMA20 {lv['E20']:,}・EMA60 {lv['E60']:,}・布林 {lv['BBL']:,}–{lv['BBU']:,}・ATR {lv['ATR']:,}"
@@ -593,6 +667,8 @@ def render(d, now):
     live = d["live"]
     src = "・".join(f"{k} {v['last_minute'][5:]}" for k, v in live.items() if "last_minute" in v) or "沒有即時資料"
     errs = "".join(f'<p class="alert">⚠ {esc(k)}：{esc(v["error"])}</p>' for k, v in live.items() if "error" in v)
+    gap = (f'<p class="alert">⚠ 資料缺口：{esc("、".join(d["gap"]))} 開始的盤沒有資料（期交所即時資料沒抓到、每日檔案還沒出，或那天是假日）。'
+           f'指標與訊號可能不準，等下一次補抓。</p>' if d.get("gap") else "")
     dst = us_dst(now)
     night_win = "21:00–23:00" if dst else "22:00–00:00"
     return f"""<!doctype html>
@@ -644,23 +720,44 @@ a {{ color:var(--accent); }}
 footer {{ margin:20px 0 40px; }}
 </style></head><body><main>
 <div class="top"><div><h1>台指策略即時訊號</h1>
-<p class="asof">{esc(sess)}・網頁產生於台北 {esc(d['generated'])}</p></div>
+<p class="asof">{esc(sess)}・網頁產生於台北 {esc(d['generated'])}（<span id="age">—</span>）</p></div>
 <div style="text-align:right"><p class="price">{d['last_price']:,.0f}</p><p class="asof">台指期近月（日盤＋夜盤）・資料到 {esc(src)}</p></div></div>
-{errs}
-{strat_card("v3・60 分K", f"60 分K 收完才看訊號；日盤 08:45–11:45、夜盤 {night_win} 開始的 K 才開新倉", d["v3"], "v3", d["last_price"], now)}
-{strat_card("D2・日K", "收盤創 20 日新高/新低，13:45 收盤前進場；台指期日K 只算日盤（08:45–13:45），夜盤不算", d["d2"], "d2", d["last_price"], now)}
+<p class="alert" id="stale" hidden></p>
+{gap}{errs}
+{strat_card("v3・60 分K", f"60 分K 收完才看訊號；日盤 08:45–11:45、夜盤 {night_win} 開始的 K 才開新倉", d["v3"], "v3", d["last_price"], now, d["prev_generated"][5:])}
+{strat_card("D2・日K", "收盤創 20 日新高/新低，13:45 收盤前進場；台指期日K 只算日盤（08:45–13:45），夜盤不算", d["d2"], "d2", d["last_price"], now, d["prev_generated"][5:])}
 {record_html("v3 模擬交易紀錄", d["v3"]["record"])}
 {record_html("D2 模擬交易紀錄", d["d2"]["record"])}
 <footer>
 <p class="note">GitHub Actions 在交易時段大約每 30 分鐘更新一次：日盤台北 08:48–13:48（:18、:48，另加 13:35 給 D2 收盤前看），
-夜盤 15:04–05:04（:04、:34）。GitHub 的排程是盡力而為，常晚 5–30 分鐘，偶爾會漏跑，所以請看上面的「資料到」時間，不要拿這頁當下單依據。</p>
+夜盤 15:04–05:04（:04、:34）。GitHub 的排程是盡力而為，常晚 5–30 分鐘，偶爾會漏跑，所以請看上面的「資料到」時間，不要拿這頁當下單依據。
+每次更新都從期交所重新抓整個日盤、夜盤的 1 分K，從頭重算 K 棒、部位與停損，所以中間漏跑幾次不會漏掉 K 棒，也不會漏掉停損；
+晚到的進出場會在卡片上標「上次更新之後」並寫晚了幾分鐘。每天 06:30 的存檔若漏跑，下一次更新發現缺盤會自動去期交所補抓。</p>
 <p class="note">「形成中」表示那根 K 還沒收完，條件是用現價先算，收K前都可能變。v3 的訊號要等 60 分K 收完、下一根開盤才進場；D2 是日K 收盤前進場。
 試算：本金 20 萬、1 口微台（每點 10 元）、每次下單 25 元；R 是以初始停損點數為 1 的倍數。</p>
 <p class="note"><b>資料：兩套策略的訊號、部位、停損都只用台指期近月（TX）；v3 含夜盤，D2 日K 只算日盤</b>：期交所每筆成交轉 1 分K（history 到 {esc(d['history_last'])}）＋期交所即時 1 分K＋期交所每日行情（D2 日K 指標用，2024 年起）。
 加權指數只是歷史成交紀錄頁裡的回測資料，不用在這頁。規則：<code>strategy/v3.py</code> 的 V3、<code>strategy/daily.py</code> 的 D2。
 <a href="trades.html">歷史成交紀錄</a>・<a href="strategy.html">v3 前測（每日）</a>・<a href="index.html">選擇權盤面</a></p>
 </footer>
-</main></body></html>
+</main>
+<script>
+(function () {{
+  // 用看網頁的人的時鐘算這頁多久沒更新；交易時段超過 45 分鐘就提醒（GitHub 排程延遲或漏跑）
+  var gen = new Date("{d['generated'].replace(' ', 'T')}:00+08:00"), now = new Date();
+  var m = Math.round((now - gen) / 60000);
+  var age = document.getElementById("age");
+  if (age) age.textContent = m < 1 ? "剛剛" : m < 120 ? m + " 分鐘前" : Math.round(m / 60) + " 小時前";
+  var tp = new Date(now.getTime() + (now.getTimezoneOffset() + 480) * 60000);
+  var wd = tp.getDay(), mins = tp.getHours() * 60 + tp.getMinutes();
+  var open = (wd >= 1 && wd <= 5 && mins >= 525 && mins <= 830) || (wd >= 1 && wd <= 5 && mins >= 900) || (wd >= 2 && wd <= 6 && mins <= 300);
+  if (open && m > 45) {{
+    var el = document.getElementById("stale");
+    el.hidden = false;
+    el.textContent = "⚠ 交易時段中，這頁已經 " + (m < 120 ? m + " 分鐘" : Math.round(m / 60) + " 小時") + "沒有更新（GitHub 排程延遲或漏跑），價格、停損與訊號可能過時。";
+  }}
+}})();
+</script>
+</body></html>
 """
 
 

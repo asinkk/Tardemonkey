@@ -44,13 +44,13 @@ def to_1min(raw):
     return bars
 
 
-def main():
-    out = sys.argv[1] if len(sys.argv) > 1 else os.path.join("history", "tx_1min")
+def collect(out, refresh=REFRESH_NEWEST):
+    """下載 out 裡還沒有的檔案，並重抓最新 refresh 個。回傳更新的檔案數。live.py 補缺口時用 refresh=0。"""
     os.makedirs(out, exist_ok=True)
     names = sorted(set(re.findall(r"Daily_\d{4}_\d{2}_\d{2}\.zip", get(LIST_URL).decode("utf-8", "replace"))))
     if not names:
-        sys.exit("期交所頁面沒有列出任何檔案，可能改版了")
-    newest = set(names[-REFRESH_NEWEST:])
+        raise RuntimeError("期交所頁面沒有列出任何檔案，可能改版了")
+    newest = set(names[-refresh:]) if refresh else set()
     done = 0
     for name in names:
         dest = os.path.join(out, name.replace(".zip", ".csv"))
@@ -76,6 +76,15 @@ def main():
         done += 1
         print("已存", dest, len(bars), "筆 1 分K")
     print("完成，更新", done, "個檔案")
+    return done
+
+
+def main():
+    out = sys.argv[1] if len(sys.argv) > 1 else os.path.join("history", "tx_1min")
+    try:
+        collect(out)
+    except RuntimeError as e:
+        sys.exit(str(e))
 
 
 if __name__ == "__main__":
