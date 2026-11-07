@@ -11,8 +11,8 @@
 | `optimize.py` | v2 參數搜尋：前 16 個月挑參數，後 8 個月驗證 |
 | `simulate.py` | 固定口數試算帳戶金額（預設 20 萬、1 口微台、每次下單 25 元），含買進持有對照 |
 | `forward.py` | v3 前測：每天用累積的台指期日夜盤資料跑 v3，輸出 `docs/strategy.html` 與 `history/forward_trades.csv`（2026/11/9 起算前測） |
-| `fetch_tx_daily.py` | 期交所台指期每日行情（2024 年起，日盤＋夜盤），存到 `history/tx_daily.csv`，給 D2 日K 指標用 |
-| `live.py` | 即時訊號頁：history 加上期交所即時 1 分K（MIS getChartData1M），算 v3（60 分K）與 D2（日K，前一晚夜盤＋當天日盤算一根）目前的部位、停損、訊號與進場條件，輸出 `docs/live.html`、`docs/live.json`；`--record` 另存 D2 交易紀錄 |
+| `fetch_tx_daily.py` | 期交所台指期每日行情（2024 年起，日盤與夜盤分列），存到 `history/tx_daily.csv`；D2 只取日盤當日K 指標暖機 |
+| `live.py` | 即時訊號頁：history 加上期交所即時 1 分K（MIS getChartData1M），算 v3（60 分K，含夜盤）與 D2（台指期日K，只算日盤）目前的部位、停損、訊號與進場條件，輸出 `docs/live.html`、`docs/live.json`；`--record` 另存 D2 交易紀錄 |
 | `trades_page.py` | 歷史成交紀錄頁 `docs/trades.html`（台指期累積資料＋近 2 年加權指數回測，v3 與 D2 每一筆，時間到分鐘），由 `live.py` 產生 |
 | `v3.py` | v3：加上拉回進場、5 ATR 移動停利、日線濾網選項，含參數搜尋 |
 | `daily.py` | 日K 版：把 60 分K 合成日K（台指期夜盤併入下一個交易日），回測 v3 條件直接搬到日K 與調整版 D1，含參數搜尋 |
@@ -58,5 +58,5 @@ python strategy/live.py --out docs                       # 抓即時資料
 python strategy/live.py --out /tmp/x --offline           # 只用 history
 ```
 
-**資料分工（2026-11-07）**：即時訊號、前測與實際交易只用台指期近月（TX，日盤＋夜盤）；加權指數只是回測用的歷史資料，
-只出現在歷史成交紀錄頁的回測區。D2 改用含夜盤的台指期日K 後，11/5 那筆空單因為夜盤高點讓停損距離超過 1.5 ATR 而不成立。
+**資料分工（2026-11-07）**：即時訊號、前測與實際交易只用台指期近月（TX）；加權指數只是回測用的歷史資料，
+只出現在歷史成交紀錄頁的回測區。v3 用日盤＋夜盤 60 分K；D2 的台指期日K 只用日盤（08:45–13:45），指標暖機用期交所台指期每日行情（不接加權指數）。
