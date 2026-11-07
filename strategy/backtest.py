@@ -12,6 +12,8 @@ import csv, datetime as dt, statistics, sys
 from collections import defaultdict
 
 COST = 3
+# 修訂版 v2（2026-11-07 依近 2 年加權指數回測調整）：拿掉擠壓條件、突破 K 實體 ≥ 0.8 ATR、保本後只用 EMA20 全部出場
+V2 = dict(squeeze_on=False, body_atr=0.8, stop_atr=1.5, max_atr=2.0, be_r=1.0, exit_mode="ema20")
 
 
 def load(path):
@@ -76,35 +78,40 @@ def indicators(T, O, H, L, C):
 
 
 def run(bars, ind, revised, allowed=None, fallback60=False, stop_atr=1.5, max_atr=2.0,
-        be_r=1.0, exit_mode="split", squeeze_on=True):
+        be_r=1.0, exit_mode="split", squeeze_on=True, squeeze_pct=0.2, body_atr=0.5,
+        chand_k=3.0, target_r=2.0, start=None, end=None, sides=(1, -1)):
+    """revised=False 是草稿規則；revised=True 是修訂版，其餘參數只對修訂版有效。
+    exit_mode：split（保本後 EMA10 出一半、EMA20 全出）、ema20、chand（保本後用最高收盤 − chand_k×ATR 移動停利）、
+               target（target_r 倍 R 先出一半，剩下 EMA20）。be_r=None 表示不設保本。"""
     T, O, H, L, C = bars
     n = len(C)
     E10, E20, E60, hist = ind["E10"], ind["E20"], ind["E60"], ind["hist"]
     MID, SD, BBW, ATR = ind["MID"], ind["SD"], ind["BBW"], ind["ATR"]
-
-    def squeeze(i, look=100, pct=0.2, within=6):
-        for j in range(i - within, i):
-            w = [x for x in BBW[max(19, j - look):j + 1] if x]
-            if len(w) < 40:
-                return False
-            if sorted(w).index(BBW[j]) <= pct * (len(w) - 1):
-                return True
-        return False
+    sq_key = ("sq", squeeze_pct)
+    if sq_key not in ind:
+        low = [False] * n
+        for j in range(n):
+            w = [x for x in BBW[max(19, j - 100):j + 1] if x]
+            low[j] = len(w) >= 40 and sorted(w).index(BBW[j]) <= squeeze_pct * (len(w) - 1)
+        ind[sq_key] = [any(low[max(0, i - 6):i]) for i in range(n)]
+    SQ = ind[sq_key]
 
     trades, skipped, i = [], 0, 100
     while i < n - 1:
         side = 0
-        if allowed is None or allowed(T[i]):
-            for s in (1, -1):
+        in_range = (start is None or T[i] >= start) and (end is None or T[i] < end)
+        if in_range and (allowed is None or allowed(T[i])):
+            for s in sides:
                 body, rng = (C[i] - O[i]) * s, H[i] - L[i]
                 if revised:
-                    strong = body > 0 and body >= 0.5 * rng and body >= 0.5 * ATR[i - 1]
+                    strong = body > 0 and body >= 0.5 * rng and body >= body_atr * ATR[i - 1]
                     mom = hist[i] * s > 0
                 else:
                     strong = body > 0 and body >= 0.6 * rng
                     mom = hist[i] * s > 0 and (hist[i] - hist[i - 1]) * s > 0
+                sq = SQ[i] if (squeeze_on or not revised) else True
                 if (E20[i] - E60[i]) * s > 0 and (C[i] - (MID[i] + 2 * SD[i] * s)) * s > 0 \
-                        and strong and mom and (not squeeze_on or squeeze(i)):
+                        and strong and mom and sq:
                     side = s
         if not side:
             i += 1
@@ -124,20 +131,35 @@ def run(bars, ind, revised, allowed=None, fallback60=False, stop_atr=1.5, max_at
                     i += 1; continue
                 stop = e - 60 * side
         R = abs(e - stop)
-        units, pnl, be, partial, j = 2, 0.0, False, False, i + 1
+        units, pnl, be, partial, j, best = 2, 0.0, False, False, i + 1, e
         while j < n:
             worst = L[j] if side > 0 else H[j]
             if (worst - stop) * side <= 0:  # 觸及停損；跳空時以開盤價成交
                 px = stop if (O[j] - stop) * side > 0 else O[j]
                 pnl += units * (px - e) * side; units = 0; break
+            if revised and exit_mode == "target" and not partial:
+                tgt = e + target_r * R * side
+                if ((H[j] if side > 0 else L[j]) - tgt) * side >= 0:
+                    pnl += (max(tgt * side, O[j] * side) * side - e) * side; units -= 1; partial = True
             if not be:
-                hit = (C[j] - e) * side >= be_r * R if revised else ((H[j] if side > 0 else L[j]) - e) * side >= R
+                if revised:
+                    hit = be_r is not None and (C[j] - e) * side >= be_r * R
+                else:
+                    hit = ((H[j] if side > 0 else L[j]) - e) * side >= R
                 if hit:
                     be, stop = True, e + (COST * side if revised else 0)
             if j + 1 >= n:
                 pnl += units * (C[j] - e) * side; units = 0; break
-            active = be if revised else True
-            if exit_mode == "split" and active and not partial and (C[j] - E10[j]) * side < 0:
+            active = (be or be_r is None) if revised else True
+            if revised and exit_mode == "chand":
+                best = max(best * side, C[j] * side) * side
+                if active:
+                    trail = best - chand_k * ATR[j] * side
+                    if (trail - stop) * side > 0:
+                        stop = trail
+                j += 1
+                continue
+            if (exit_mode == "split" or not revised) and active and not partial and (C[j] - E10[j]) * side < 0:
                 pnl += (O[j + 1] - e) * side; units -= 1; partial = True
             if active and (C[j] - E20[j]) * side < 0:
                 pnl += units * (O[j + 1] - e) * side; units = 0; j += 1; break
@@ -174,23 +196,26 @@ def line(name, trades, skipped):
 if __name__ == "__main__":
     path = sys.argv[1] if len(sys.argv) > 1 else "tx_60min.csv"
     src = sys.argv[2] if len(sys.argv) > 2 else "tx"
+    start = dt.datetime.strptime(sys.argv[3], "%Y-%m-%d") if len(sys.argv) > 3 else None
     draft_f, rev_f = (tx_draft, tx_revised) if src == "tx" else (twii_draft, twii_revised)
     bars = load(path)
     ind = indicators(*bars)
-    print("K 棒", len(bars[0]), "根：", bars[0][0], "~", bars[0][-1])
-    print(line("草稿版（停損 >90 點不做）", *run(bars, ind, False, draft_f)))
-    print(line("草稿版（>90 點改固定 60 點）", *run(bars, ind, False, draft_f, fallback60=True)))
-    rev, sk = run(bars, ind, True, rev_f)
-    print(line("修訂版", rev, sk))
-    print(line("修訂版（無時段濾網）", *run(bars, ind, True, None)))
-    print(line("修訂版（無擠壓條件）", *run(bars, ind, True, rev_f, squeeze_on=False)))
-    print(line("修訂版（停損 2 ATR）", *run(bars, ind, True, rev_f, stop_atr=2.0, max_atr=2.5)))
-    print(line("修訂版（保本 1.5R）", *run(bars, ind, True, rev_f, be_r=1.5)))
-    print(line("修訂版（只用 EMA20 出場）", *run(bars, ind, True, rev_f, exit_mode="ema20")))
+    print("K 棒", len(bars[0]), "根：", bars[0][0], "~", bars[0][-1], "；統計起點", start or bars[0][0])
+    print(line("草稿版（停損 >90 點不做）", *run(bars, ind, False, draft_f, start=start)))
+    print(line("草稿版（>90 點改固定 60 點）", *run(bars, ind, False, draft_f, fallback60=True, start=start)))
+    print(line("修訂版 v1", *run(bars, ind, True, rev_f, start=start)))
+    v2, sk = run(bars, ind, True, rev_f, start=start, **V2)
+    print(line("修訂版 v2", v2, sk))
+    print(line("v2（無時段濾網）", *run(bars, ind, True, None, start=start, **V2)))
+    print(line("v2（停損 2 ATR）", *run(bars, ind, True, rev_f, start=start, **dict(V2, stop_atr=2.0, max_atr=2.5))))
+    print(line("v2（保本 1.5R）", *run(bars, ind, True, rev_f, start=start, **dict(V2, be_r=1.5))))
+    print(line("v2（EMA10 出一半）", *run(bars, ind, True, rev_f, start=start, **dict(V2, exit_mode="split"))))
     by = defaultdict(list)
-    for t in rev:
+    for t in v2:
         by[t["t"].year].append(t)
     for y in sorted(by):
-        print(line(f"  修訂版 {y}", by[y], 0))
+        print(line(f"  v2 {y}", by[y], 0))
     for side, nm in ((1, "多"), (-1, "空")):
-        print(line(f"  修訂版 只看{nm}單", [t for t in rev if t["side"] == side], 0))
+        print(line(f"  v2 只看{nm}單", [t for t in v2 if t["side"] == side], 0))
+    for t in v2:
+        print(f"   {t['t']:%Y-%m-%d %H:%M} {'多' if t['side'] > 0 else '空'} 停損 {t['R']:.0f} 點 {t['r']:+.2f}R")
