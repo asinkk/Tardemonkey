@@ -56,3 +56,11 @@ GitHub 的排程常會延遲 5 到 30 分鐘。GitHub 主機在國外，如果�
 3. 只能用 Windows 版 Excel；電腦時間請設台北時間。
 
 巨集原始碼在 `excel/TXO.bas`；改完執行 `python3 excel/build_xlsm.py` 重新產生 .xlsm（需要 openpyxl）。
+
+## Excel 策略訊號版（v3＋D2，獨立運行）
+
+`excel/台指策略訊號.xlsm`：即時訊號頁（live.html）與成交紀錄頁（trades.html）的 Excel 版。純 VBA 直接向期交所抓台指期近月 1 分K（MIS 即時＋每日逐筆檔）與日K，自己算 v3（60 分K、日夜盤）和 D2（日K、只用日盤），顯示部位、停損、進場條件與成交紀錄，不需要 GitHub 或 Python。
+
+1. 用打包好的資料夾（xlsm 旁邊要有 `strategy_data\`，內含歷史 1 分K、日K、加權 60 分K），解除封鎖後打開並「啟用內容」。
+2. 按「立即更新」，或開「自動更新」（盤中每 5 分鐘）。資料會累積在 `strategy_data\`。
+3. 打包：`python3 excel/build_strategy_xlsm.py --zip out.zip`；原始碼與驗證方法見 `excel/strategy_vba/README.md`。
