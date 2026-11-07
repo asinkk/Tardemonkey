@@ -34,7 +34,7 @@ jobs:
         run: |
           git config user.name "txo-bot"
           git config user.email "txo-bot@users.noreply.github.com"
-          git add history/tx_1min history/twii_60min.csv history/forward_trades.csv history/forward_d2_trades.csv docs/strategy.html docs/live.html docs/live.json
+          git add history/tx_1min history/twii_60min.csv history/forward_trades.csv history/forward_d2_trades.csv docs/strategy.html docs/live.html docs/live.json docs/trades.html
           git diff --cached --quiet && exit 0
           git commit -m "累積台指期 1 分K $(TZ=Asia/Taipei date '+%F')"
           git pull --rebase origin main
