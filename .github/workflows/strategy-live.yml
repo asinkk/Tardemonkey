@@ -24,8 +24,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
       - name: 抓即時 1 分K，算 v3 與 D2 目前狀態
@@ -37,8 +37,9 @@ jobs:
           git add docs/live.html docs/live.json docs/trades.html history/tx_1min
           git diff --cached --quiet && exit 0
           git commit -m "策略訊號 $(TZ=Asia/Taipei date '+%F %H:%M')"
-          for i in 1 2 3; do
-            git pull --rebase origin main && git push && exit 0
+          for i in 1 2 3 4 5; do
+            if git pull --rebase origin main && git push; then exit 0; fi
+            git rebase --abort 2>/dev/null || true
             sleep $((i * 5))
           done
           exit 1

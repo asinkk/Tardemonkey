@@ -5,13 +5,17 @@ on:
     paths: ["txo_data.py", "txo_extra.py", "txo_report.py", "template.html"]
 permissions:
   contents: write
+# 連續推兩次時，避免兩個編譯同時刪建同一個 Release
+concurrency:
+  group: build-exe
+  cancel-in-progress: true
 jobs:
   build:
     runs-on: windows-latest
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
         with: {python-version: "3.12"}
       - name: PyInstaller
         run: |

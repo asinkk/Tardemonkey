@@ -23,7 +23,7 @@ def main():
     ap.add_argument("--history", default=os.path.join(BASE, "history"), help="資料存檔資料夾，給空字串則不存")
     ap.add_argument("--no-open", action="store_true", help="EXE 版預設跑完會打開瀏覽器；排程執行時加這個參數")
     ap.add_argument("--history-at-close", action="store_true",
-                    help="只在日盤收盤後（13:40–15:00）與夜盤收盤前後（04:30–05:30）存檔，避免每半小時都存")
+                    help="只在日盤收盤後（13:45–15:00）與夜盤收盤後（05:00–06:30）存檔，避免每半小時都存")
     a = ap.parse_args()
 
     with tempfile.TemporaryDirectory() as tmp:
@@ -44,7 +44,7 @@ def main():
         f.write(html)
 
     hm = now.hour * 100 + now.minute
-    at_close = 1340 <= hm < 1500 or 430 <= hm < 530
+    at_close = 1345 <= hm < 1500 or 500 <= hm < 630
     # 給 Google 試算表 IMPORTDATA 用的 CSV
     import csv as _csv
     outdir = os.path.dirname(os.path.abspath(a.out))
