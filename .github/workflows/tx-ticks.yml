@@ -9,8 +9,9 @@ on:
 permissions:
   contents: write
 
+# 和策略即時訊號寫同一批檔案（docs/live.*、history/tx_1min），排同一組才不會同時改到
 concurrency:
-  group: txo-update
+  group: strategy-live
   cancel-in-progress: false
 
 jobs:
@@ -18,8 +19,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
       - name: 下載期交所每筆成交並轉成 1 分K
@@ -28,7 +29,7 @@ jobs:
         run: python strategy/fetch_twii.py history/twii_60min.csv || echo "Yahoo 抓取失敗，略過"
       - name: v3 前測（模擬交易紀錄與網頁）
         run: cd strategy && python forward.py ../history/tx_1min ../docs/strategy.html ../history/forward_trades.csv
-      - name: 更新台指期每日行情（D2 日K 用，含夜盤）
+      - name: 更新台指期每日行情（D2 日K 只用日盤列，夜盤列一併存著）
         run: python strategy/fetch_tx_daily.py history/tx_daily.csv || echo "期交所每日行情抓取失敗，略過"
       - name: v3 與 D2 即時訊號頁、D2 交易紀錄
         run: python strategy/live.py --out docs --record history/forward_d2_trades.csv
@@ -39,5 +40,9 @@ jobs:
           git add history/tx_1min history/tx_daily.csv history/twii_60min.csv history/forward_trades.csv history/forward_d2_trades.csv docs/strategy.html docs/live.html docs/live.json docs/trades.html
           git diff --cached --quiet && exit 0
           git commit -m "累積台指期 1 分K $(TZ=Asia/Taipei date '+%F')"
-          git pull --rebase origin main
-          git push
+          for i in 1 2 3 4 5; do
+            if git pull --rebase origin main && git push; then exit 0; fi
+            git rebase --abort 2>/dev/null || true
+            sleep $((i * 5))
+          done
+          exit 1

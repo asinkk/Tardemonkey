@@ -6,8 +6,12 @@ on:
     # 日盤：台北 08:45–13:45
     - cron: "52 0 * * 1-5"
     - cron: "8,38 1-5 * * 1-5"
-    # 夜盤：台北 15:15–隔天 04:45
+    # 日盤收盤後 13:50 補一次（收盤價、收盤存檔）
+    - cron: "50 5 * * 1-5"
+    # 夜盤：台北 15:00–隔天 05:00
     - cron: "8,38 7-20 * * 1-5"
+    # 夜盤收盤後 05:08 補一次
+    - cron: "8 21 * * 1-5"
   workflow_dispatch: {}
 
 permissions:
@@ -22,8 +26,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
       - name: 抓資料並產生頁面
@@ -35,5 +39,9 @@ jobs:
           git add docs history
           git diff --cached --quiet && exit 0
           git commit -m "更新盤面 $(TZ=Asia/Taipei date '+%F %H:%M')"
-          git pull --rebase origin main
-          git push
+          for i in 1 2 3 4 5; do
+            if git pull --rebase origin main && git push; then exit 0; fi
+            git rebase --abort 2>/dev/null || true
+            sleep $((i * 5))
+          done
+          exit 1
