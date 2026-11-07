@@ -78,6 +78,75 @@ Public gLV() As Double
 Public gGapN As Long
 Public gGap() As Long
 
+' ---- 全域結果（VBA 規定模組層級宣告必須放在所有程序之前）----
+' v3 台指期 60 分K
+Public gVN As Long
+Public gVT() As Long
+Public gVO() As Double
+Public gVH() As Double
+Public gVL() As Double
+Public gVC() As Double
+Public gVE20() As Double
+Public gVE60() As Double
+Public gVHI() As Double
+Public gVMID() As Double
+Public gVSD() As Double
+Public gVATR() As Double
+Public gVTr() As Variant
+Public gVTn As Long
+Public gVPos As Long
+Public gVSig() As Variant       ' 有訊號時是一筆交易（tr2 的那一筆，0 To F_LAST），沒有時 gVSigHas = False
+Public gVSigHas As Boolean
+Public gVPend As String
+Public gVPendHas As Boolean
+' D2 台指期日K（只用日盤）
+Public gDN As Long
+Public gDT() As Long
+Public gDO() As Double
+Public gDH() As Double
+Public gDL() As Double
+Public gDC() As Double
+Public gDE20() As Double
+Public gDE60() As Double
+Public gDHI() As Double
+Public gDMID() As Double
+Public gDSD() As Double
+Public gDATR() As Double
+Public gDI0 As Long
+Public gDTr() As Variant
+Public gDTn As Long
+Public gDPos As Long
+Public gDSig() As Variant
+Public gDSigHas As Boolean
+Public gDPend As String
+Public gDPendHas As Boolean
+' 加權指數回測（近 2 年）
+Public gWVTr() As Variant
+Public gWVTn As Long
+Public gWDTr() As Variant
+Public gWDTn As Long
+Public gTwN As Long
+Public gTwLast As Long
+' 其他
+Public gLastC As Double
+Public gM1N As Long
+Public gNowTm As Long
+Public gStep As String
+
+' 條件明細（顯示用）：策略 1 = v3、2 = D2；方向 1 = 多、2 = 空
+Public gCkN As Long
+Public gCkStrat() As Long
+Public gCkSide() As Long
+Public gCkGroup() As String
+Public gCkName() As String
+Public gCkOk() As Boolean
+Public gCkDetail() As String
+Public gStopOk(1 To 2, 1 To 2) As Boolean
+Public gStopVal(1 To 2, 1 To 2) As Double
+Public gStopRaw(1 To 2, 1 To 2) As Double
+' 測試用：有值時 MisGet 改讀測試資料
+Public gFixtureDir As String
+
 ' ============================================================
 ' 時間與數字小工具
 ' ============================================================
@@ -1358,71 +1427,6 @@ End Sub
 ' ============================================================
 ' 全部計算（live.py main 的計算部分）。呼叫前先 ResetUnits/LoadHistory/ResetLive/(ParseChart)/AddLiveUnits
 ' ============================================================
-' v3 台指期 60 分K
-Public gVN As Long
-Public gVT() As Long
-Public gVO() As Double
-Public gVH() As Double
-Public gVL() As Double
-Public gVC() As Double
-Public gVE20() As Double
-Public gVE60() As Double
-Public gVHI() As Double
-Public gVMID() As Double
-Public gVSD() As Double
-Public gVATR() As Double
-Public gVTr() As Variant
-Public gVTn As Long
-Public gVPos As Long
-Public gVSig() As Variant       ' 有訊號時是一筆交易（tr2 的那一筆，0 To F_LAST），沒有時 gVSigHas = False
-Public gVSigHas As Boolean
-Public gVPend As String
-Public gVPendHas As Boolean
-' D2 台指期日K（只用日盤）
-Public gDN As Long
-Public gDT() As Long
-Public gDO() As Double
-Public gDH() As Double
-Public gDL() As Double
-Public gDC() As Double
-Public gDE20() As Double
-Public gDE60() As Double
-Public gDHI() As Double
-Public gDMID() As Double
-Public gDSD() As Double
-Public gDATR() As Double
-Public gDI0 As Long
-Public gDTr() As Variant
-Public gDTn As Long
-Public gDPos As Long
-Public gDSig() As Variant
-Public gDSigHas As Boolean
-Public gDPend As String
-Public gDPendHas As Boolean
-' 加權指數回測（近 2 年）
-Public gWVTr() As Variant
-Public gWVTn As Long
-Public gWDTr() As Variant
-Public gWDTn As Long
-Public gTwN As Long
-Public gTwLast As Long
-' 其他
-Public gLastC As Double
-Public gM1N As Long
-Public gNowTm As Long
-Public gStep As String
-
-' 條件明細（顯示用）：策略 1 = v3、2 = D2；方向 1 = 多、2 = 空
-Public gCkN As Long
-Public gCkStrat() As Long
-Public gCkSide() As Long
-Public gCkGroup() As String
-Public gCkName() As String
-Public gCkOk() As Boolean
-Public gCkDetail() As String
-Public gStopOk(1 To 2, 1 To 2) As Boolean
-Public gStopVal(1 To 2, 1 To 2) As Double
-Public gStopRaw(1 To 2, 1 To 2) As Double
 
 Public Function ForwardStart() As Long
     ForwardStart = DayNum(2026, 11, 9) * 1440     ' 2026-11-09 00:00（兩套規則 11/7 定案，11/9 起算前測）
@@ -1685,7 +1689,6 @@ End Function
 ' 即時 1 分K：每個盤別抓成交量前兩大的契約（同 live.py fetch_live）
 ' gFixtureDir 有值時改讀測試資料（quotes_0.json、quotes_1.json、chart_<SymbolID>.json）
 ' ============================================================
-Public gFixtureDir As String
 
 Public Function MisGet(ByVal ep As String, ByVal body As String, ByVal key As String) As String
     If Len(gFixtureDir) > 0 Then
