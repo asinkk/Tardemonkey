@@ -3,12 +3,13 @@
 資料：
   - history/tx_1min/：每天台北 06:30 存的期交所每筆成交（轉成 1 分K）
   - 期交所 MIS 即時 1 分K（getChartData1M）：補上目前或最近一個日盤、夜盤還沒存進 history 的部分
-  - history/twii_60min.csv：加權指數 60 分K，只給 D2 日K 指標暖機用
-D2 是用加權指數日盤日K 調的參數，所以台指期這邊也只用日盤（08:45–13:45）合成日K，夜盤不算。
+  - history/tx_daily.csv：期交所台指期每日行情（2024 年起，日盤＋夜盤），給 D2 日K 指標暖機
+訊號、部位、停損全部只用台指期近月（日盤＋夜盤）。D2 的日K = 前一晚 15:00 夜盤到當天 13:45 日盤算一根。
+加權指數（history/twii_60min.csv）只用在歷史成交紀錄頁的回測，不影響這裡的訊號。
 策略規則完全沿用 v3.run（V3）與 daily.run（D2），這裡只負責接資料、判斷最後一根 K 是否已收完、
 把結果整理成網頁。條件明細（✓/✗）是顯示用的重算，判斷進出場以 run() 的結果為準。
 
-用法：python strategy/live.py [--src history/tx_1min] [--twii history/twii_60min.csv] [--out docs]
+用法：python strategy/live.py [--src history/tx_1min] [--daily history/tx_daily.csv] [--twii history/twii_60min.csv] [--out docs]
                              [--record history/forward_d2_trades.csv] [--offline]
 """
 import argparse, bisect, csv, datetime as dt, glob, html, json, os, shutil, sys, tempfile, urllib.request
@@ -121,6 +122,77 @@ def merged_dir(src, sessions):
 
 
 # ---------- K 棒 ----------
+def next_weekday(d):
+    d += dt.timedelta(days=1)
+    while d.weekday() >= 5:
+        d += dt.timedelta(days=1)
+    return d
+
+
+def read_raw_minutes(folder):
+    """讀資料夾裡的 1 分K（未調整），依「交易日」分組：{交易日: {契約: [(時間, 開, 高, 低, 收, 量)]}}。
+    history 檔名就是交易日（含前一晚夜盤）；即時檔的夜盤算到下一個平日（假日前一晚可能標錯日期，只影響顯示）。"""
+    out = {}
+    for f in sorted(glob.glob(os.path.join(folder, "Daily_*.csv"))):
+        name = os.path.basename(f)[:-4]
+        fdate = dt.date(int(name[6:10]), int(name[11:13]), int(name[14:16]))
+        live = "_live" in name
+        for r in csv.DictReader(open(f, encoding="utf-8")):
+            t = dt.datetime.strptime(r["date"] + r["time"], "%Y%m%d%H%M")
+            day = dt.time(8, 45) <= t.time() <= dt.time(13, 45)
+            if not live:
+                td = fdate
+            elif day:
+                td = t.date()
+            else:
+                td = next_weekday((t if t.time() >= dt.time(15, 0) else t - dt.timedelta(days=1)).date())
+            out.setdefault(td, {}).setdefault(r["contract"], []).append(
+                (t, float(r["open"]), float(r["high"]), float(r["low"]), float(r["close"]), int(r["volume"])))
+    for d in out.values():
+        for c in d:
+            d[c].sort()
+    return out
+
+
+def tx_daily_bars(daily_csv, raw):
+    """台指期近月連續日K（夜盤併入下一個交易日），換月回溯調整。
+    有 1 分K 的交易日用 1 分K 合成（含形成中的這一根），其他日子用期交所每日行情（history/tx_daily.csv）。
+    回傳 (bars, 1 分K 第一天的索引, 調整後的近月 1 分K, {交易日: 前一個交易日})。"""
+    per = {}   # 交易日 -> 契約 -> [開, 高, 低, 收, 量]
+    if os.path.exists(daily_csv):
+        sess = {}
+        for r in csv.DictReader(open(daily_csv, encoding="utf-8")):
+            sess.setdefault((r["date"], r["contract"]), {})[r["session"]] = r
+        for (d, c), ss in sess.items():
+            d = dt.date.fromisoformat(d)
+            if d in raw:
+                continue
+            parts = [ss[k] for k in ("夜盤", "日盤") if k in ss]
+            per.setdefault(d, {})[c] = [float(parts[0]["open"]), max(float(p["high"]) for p in parts),
+                                        min(float(p["low"]) for p in parts), float(parts[-1]["close"]),
+                                        sum(int(p["volume"]) for p in parts)]
+    for d, cs in raw.items():
+        for c, ms in cs.items():
+            per.setdefault(d, {})[c] = [ms[0][1], max(x[2] for x in ms), min(x[3] for x in ms), ms[-1][4], sum(x[5] for x in ms)]
+    dates = sorted(per)
+    front = [max(per[d], key=lambda c: per[d][c][4]) for d in dates]
+    off = [0.0] * len(dates)
+    for i in range(len(dates) - 1, 0, -1):
+        off[i - 1] = off[i]
+        new, old = front[i], front[i - 1]
+        if new != old and new in per[dates[i - 1]]:
+            off[i - 1] += per[dates[i - 1]][new][3] - per[dates[i - 1]][old][3]
+    T = [dt.datetime.combine(d, dt.time(0)) for d in dates]
+    O, H, L, C = ([per[d][f][k] + o for d, f, o in zip(dates, front, off)] for k in range(4))
+    m = []
+    for d, f, o in zip(dates, front, off):
+        for t, a, b, c, e, v in raw.get(d, {}).get(f, []):
+            m.append((t, a + o, b + o, c + o, e + o, v))
+    i0 = next(i for i, d in enumerate(dates) if d in raw)
+    prev = {d: dates[i - 1] for i, d in enumerate(dates) if i}
+    return (T, O, H, L, C), i0, m, prev
+
+
 def with_dummy(bars, step):
     """在最後面多接一根「開高低收都等於最後收盤」的假 K，讓 run() 也會檢查最後一根 K 的訊號與出場。"""
     T, O, H, L, C = bars
@@ -159,12 +231,13 @@ def first_touch(mT, m, start, end, stop, side):
     return None
 
 
-def refine_times(trades, strat, m, day_open=dt.time(8, 45), day_close=dt.time(13, 45)):
+def refine_times(trades, strat, m, day_open=dt.time(8, 45), day_close=dt.time(13, 45), prev=None):
     """run() 的時間是 K 棒開始時間（日K 只有日期）。這裡改成實際進出場的時點：
     - D2 進場：訊號當天收盤（台指期 13:45；加權指數 13:30）
     - 跌破/站上 EMA 出場：隔天開盤
     - 停損出場：用更細的 K 棒（台指期 1 分K、加權指數 60 分K）找第一次碰到停損的時間
-    m 是 [(開始時間, 開, 高, 低, 收, ...)]，價格要跟 trades 同一套（換月調整後）。"""
+    m 是 [(開始時間, 開, 高, 低, 收, ...)]，價格要跟 trades 同一套（換月調整後）。
+    prev：{交易日: 前一個交易日}。有給就表示日K 含夜盤（前一個交易日 15:00 開始），EMA 出場在下一根的開盤 = 當天 15:00 夜盤。"""
     mT = [r[0] for r in m]
     for x in trades:
         if strat == "d2":
@@ -176,9 +249,10 @@ def refine_times(trades, strat, m, day_open=dt.time(8, 45), day_close=dt.time(13
         if strat == "d2":
             d = x["exit_t"].date()
             if x["why"].startswith("跌破"):
-                x["exit_t"] = dt.datetime.combine(d, day_open)
+                x["exit_t"] = dt.datetime.combine(prev[d], dt.time(15, 0)) if prev and d in prev else dt.datetime.combine(d, day_open)
                 continue
-            start, end = dt.datetime.combine(d, day_open), dt.datetime.combine(d, day_close) + dt.timedelta(minutes=1)
+            start = dt.datetime.combine(prev[d], dt.time(15, 0)) if prev and d in prev else dt.datetime.combine(d, day_open)
+            end = dt.datetime.combine(d, day_close) + dt.timedelta(minutes=1)
         else:
             start, end = x["exit_t"], x["exit_t"] + dt.timedelta(minutes=60)
         t = first_touch(mT, m, start, end, x["stop"], x["side"])
@@ -288,6 +362,7 @@ def main():
     ap = argparse.ArgumentParser()
     here = os.path.dirname(os.path.abspath(__file__))
     ap.add_argument("--src", default=os.path.join(here, "..", "history", "tx_1min"))
+    ap.add_argument("--daily", default=os.path.join(here, "..", "history", "tx_daily.csv"))
     ap.add_argument("--twii", default=os.path.join(here, "..", "history", "twii_60min.csv"))
     ap.add_argument("--out", default=os.path.join(here, "..", "docs"))
     ap.add_argument("--record", help="另存 D2 交易紀錄 CSV 的路徑")
@@ -301,6 +376,7 @@ def main():
     try:
         rows = build(tmp, verbose=False)
         m1 = build(tmp, 1, verbose=False)   # 換月調整後的 1 分K，找停損觸價時間用
+        raw = read_raw_minutes(tmp)
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
     last_min = max(r[0] for r in rows)  # 60 分K 的開始時間；真正最後一分鐘看 info
@@ -314,10 +390,9 @@ def main():
     hv = evaluate(hb, lambda b, ind: v3.run(b, ind, tx_revised, "12:45", v3.V3), dt.timedelta(minutes=60))
     v3c = v3_checks(hb, hv["ind"], len(T) - 1)
 
-    # D2：台指期「只用日盤」的日K（跟調參用的加權指數日K 一樣是 1 個日盤一根），接在加權指數日K 後面暖機
-    txd = daily.tx_daily(rows, night=False)
-    tw = daily.twii_daily(load(a.twii))
-    sp, i0, off = daily.splice(tw, txd)
+    # D2：台指期日K（前一晚夜盤＋當天日盤算同一根），2024 年起的期交所每日行情＋累積的 1 分K＋即時 1 分K
+    sp, i0, md2, prev = tx_daily_bars(a.daily, raw)
+    tw = daily.twii_daily(load(a.twii))   # 加權指數只給歷史成交紀錄頁的回測用
     dlast = sp[0][-1]
     d_close = dt.datetime.combine(dlast.date(), dt.time(13, 45))
     d_forming = now < d_close
@@ -325,7 +400,7 @@ def main():
     d2c = d2_checks(sp, hd["ind"], len(sp[0]) - 1)
 
     refine_times(hv["trades"], "v3", m1)
-    refine_times(hd["trades"], "d2", m1)
+    refine_times(hd["trades"], "d2", md2, prev=prev)
 
     if a.record:
         write_record(a.record, hd["trades"], last_c)
@@ -378,6 +453,7 @@ def main():
                          {"BBU": round(hv["ind"]["MID"][-1] + 2 * hv["ind"]["SD"][-1]),
                           "BBL": round(hv["ind"]["MID"][-1] - 2 * hv["ind"]["SD"][-1])}},
         "d2": {"bar": f"{dlast:%Y-%m-%d}", "forming": d_forming,
+               "night_only": not any(t.date() == dlast.date() and dt.time(8, 45) <= t.time() <= dt.time(13, 45) for t, *_ in md2[-1500:]),
                "pos": pos_info(hd, "d2"), "sig": sig_info(hd), "checks": d2c, "record": rec(hd),
                "levels": {k: round(hd["ind"][k][-1]) for k in ("E20", "E60", "ATR")},
                "bar_ohlc": [round(sp[k][-1]) for k in range(1, 5)]},
@@ -439,7 +515,8 @@ def strat_card(name, sub, s, kind, last_c, now):
     if kind == "v3":
         bar_txt = (f"最後一根 60 分K：{s['bar'][5:]} 起{'，形成中（' + s['bar_end'] + ' 收）' if s['forming'] else '，已收完'}")
     else:
-        bar_txt = f"最後一根日K（只算日盤）：{s['bar'][5:]}" + ("，形成中（13:45 收）" if s["forming"] else "，已收盤")
+        bar_txt = (f"最後一根日K（含前一晚夜盤）：{s['bar'][5:]}"
+                   + ("，目前只有夜盤，形成中（日盤 13:45 收）" if s.get("night_only") else "，形成中（13:45 收）" if s["forming"] else "，已收盤"))
     if pos:
         st_cls = "long" if pos["side"] == "多" else "short"
         status = f'<span class="state {st_cls}">持{pos["side"]}單</span>'
@@ -559,10 +636,10 @@ footer {{ margin:20px 0 40px; }}
 </style></head><body><main>
 <div class="top"><div><h1>台指策略即時訊號</h1>
 <p class="asof">{esc(sess)}・網頁產生於台北 {esc(d['generated'])}</p></div>
-<div style="text-align:right"><p class="price">{d['last_price']:,.0f}</p><p class="asof">台指期近月・資料到 {esc(src)}</p></div></div>
+<div style="text-align:right"><p class="price">{d['last_price']:,.0f}</p><p class="asof">台指期近月（日盤＋夜盤）・資料到 {esc(src)}</p></div></div>
 {errs}
 {strat_card("v3・60 分K", f"60 分K 收完才看訊號；日盤 08:45–11:45、夜盤 {night_win} 開始的 K 才開新倉", d["v3"], "v3", d["last_price"], now)}
-{strat_card("D2・日K", "收盤創 20 日新高/新低，13:45 收盤前進場；日K 只看日盤，夜盤不算", d["d2"], "d2", d["last_price"], now)}
+{strat_card("D2・日K", "收盤創 20 日新高/新低，13:45 收盤前進場；日K 含前一晚夜盤（15:00 到隔天 13:45 算一根）", d["d2"], "d2", d["last_price"], now)}
 {record_html("v3 模擬交易紀錄", d["v3"]["record"])}
 {record_html("D2 模擬交易紀錄", d["d2"]["record"])}
 <footer>
@@ -570,7 +647,8 @@ footer {{ margin:20px 0 40px; }}
 夜盤 15:04–05:04（:04、:34）。GitHub 的排程是盡力而為，常晚 5–30 分鐘，偶爾會漏跑，所以請看上面的「資料到」時間，不要拿這頁當下單依據。</p>
 <p class="note">「形成中」表示那根 K 還沒收完，條件是用現價先算，收K前都可能變。v3 的訊號要等 60 分K 收完、下一根開盤才進場；D2 是日K 收盤前進場。
 試算：本金 20 萬、1 口微台（每點 10 元）、每次下單 25 元；R 是以初始停損點數為 1 的倍數。</p>
-<p class="note">規則：<code>strategy/v3.py</code> 的 V3、<code>strategy/daily.py</code> 的 D2。資料：期交所每日成交（history 到 {esc(d['history_last'])}）＋期交所即時 1 分K。
+<p class="note"><b>資料：兩套策略的訊號、部位、停損都只用台指期近月（TX，日盤＋夜盤）</b>：期交所每筆成交轉 1 分K（history 到 {esc(d['history_last'])}）＋期交所即時 1 分K＋期交所每日行情（D2 日K 指標用，2024 年起）。
+加權指數只是歷史成交紀錄頁裡的回測資料，不用在這頁。規則：<code>strategy/v3.py</code> 的 V3、<code>strategy/daily.py</code> 的 D2。
 <a href="trades.html">歷史成交紀錄</a>・<a href="strategy.html">v3 前測（每日）</a>・<a href="index.html">選擇權盤面</a></p>
 </footer>
 </main></body></html>
