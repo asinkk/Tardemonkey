@@ -12,7 +12,7 @@
 
 ```
 python strategy/build_bars.py history/tx_1min tx_60min.csv
-python strategy/backtest.py tx_60min.csv
+python strategy/backtest.py tx_60min.csv tx
 ```
 
 `build_bars.py` 第三個參數可以改 K 棒分鐘數，例如 `15`。

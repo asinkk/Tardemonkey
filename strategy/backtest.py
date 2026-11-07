@@ -1,16 +1,21 @@
-"""台指期 60 分K 趨勢＋布林擠壓突破策略回測：原版（草稿）與修訂版。
+"""台指 60 分K 趨勢＋布林擠壓突破策略回測：草稿版與修訂版。
 
-先用 build_bars.py 產生 60 分K，再執行：
-    python strategy/backtest.py tx_60min.csv
-每筆以 2 單位計（可分批出場），每單位扣 COST 點交易成本。結果以點數與 R（初始風險倍數）表示。
+資料是 CSV（start,open,high,low,close,volume），兩種來源：
+    tx    build_bars.py 產生的台指期日夜盤 60 分K（只有最近累積的天數）
+    twii  加權指數日盤 60 分K（Yahoo，約 3 年；沒有夜盤，09:00 起 5 根）
+用法：
+    python strategy/backtest.py tx_60min.csv tx
+    python strategy/backtest.py twii_60min.csv twii
+每筆以 2 單位計（可分批出場），每單位扣 COST 點來回成本。結果以 R（初始風險倍數）表示。
 """
 import csv, datetime as dt, statistics, sys
+from collections import defaultdict
 
-COST = 3  # 每單位來回成本（點）
+COST = 3
 
 
 def load(path):
-    rows = list(csv.DictReader(open(path, encoding="utf-8")))
+    rows = [r for r in csv.DictReader(open(path, encoding="utf-8")) if not r["start"].endswith("13:30")]
     T = [dt.datetime.strptime(r["start"], "%Y-%m-%d %H:%M") for r in rows]
     O, H, L, C = ([float(r[k]) for r in rows] for k in ("open", "high", "low", "close"))
     return T, O, H, L, C
@@ -24,41 +29,58 @@ def ema(x, p):
 
 
 def us_dst(d):
-    """美國夏令：3 月第二個週日到 11 月第一個週日（用台灣日期近似）。"""
     def nth_sunday(year, month, n):
         first = dt.date(year, month, 1)
         return first + dt.timedelta(days=(6 - first.weekday()) % 7 + 7 * (n - 1))
     return nth_sunday(d.year, 3, 2) <= d.date() < nth_sunday(d.year, 11, 1)
 
 
-def allowed_revised(t):
-    """修訂版時段濾網（看訊號 K 的開始時間）。沒有個別數據日曆，數據那根一律不開。"""
-    hm = t.strftime("%H:%M")
-    if hm in ("08:45", "09:45", "10:45", "11:45"):
-        return True
-    night = ("21:00", "22:00", "23:00") if us_dst(t) else ("22:00", "23:00", "00:00")
-    return hm in night
-
-
-def allowed_draft(t):
+# 各資料來源的時段濾網（看訊號 K 的開始時間）
+def tx_draft(t):
     return t.strftime("%H:%M") in ("08:45", "09:45", "10:45", "21:00", "22:00", "23:00")
 
 
-def run(T, O, H, L, C, revised, timefilter=True, fallback60=False):
+def tx_revised(t):
+    hm = t.strftime("%H:%M")
+    if hm in ("08:45", "09:45", "10:45", "11:45"):
+        return True
+    return hm in (("21:00", "22:00", "23:00") if us_dst(t) else ("22:00", "23:00", "00:00"))
+
+
+def twii_draft(t):
+    return t.hour in (9, 10, 11)
+
+
+def twii_revised(t):
+    return t.hour in (9, 10, 11, 12)  # 13:00 是收盤前最後一根，不開新倉
+
+
+def indicators(T, O, H, L, C):
     n = len(C)
-    E10, E20, E60 = ema(C, 10), ema(C, 20), ema(C, 60)
+    ind = dict(E10=ema(C, 10), E20=ema(C, 20), E60=ema(C, 60))
     macd = [a - b for a, b in zip(ema(C, 12), ema(C, 26))]
-    hist = [a - b for a, b in zip(macd, ema(macd, 9))]
+    ind["hist"] = [a - b for a, b in zip(macd, ema(macd, 9))]
     MID, SD = [None] * n, [None] * n
     for i in range(19, n):
         w = C[i - 19:i + 1]
         MID[i], SD[i] = sum(w) / 20, statistics.pstdev(w)
-    BBW = [4 * SD[i] / MID[i] if MID[i] else None for i in range(n)]
+    ind["MID"], ind["SD"] = MID, SD
+    ind["BBW"] = [4 * SD[i] / MID[i] if MID[i] else None for i in range(n)]
     ATR, a = [], None
     for i in range(n):
         tr = H[i] - L[i] if i == 0 else max(H[i] - L[i], abs(H[i] - C[i - 1]), abs(L[i] - C[i - 1]))
         a = tr if a is None else a + (tr - a) / 14
         ATR.append(a)
+    ind["ATR"] = ATR
+    return ind
+
+
+def run(bars, ind, revised, allowed=None, fallback60=False, stop_atr=1.5, max_atr=2.0,
+        be_r=1.0, exit_mode="split", squeeze_on=True):
+    T, O, H, L, C = bars
+    n = len(C)
+    E10, E20, E60, hist = ind["E10"], ind["E20"], ind["E60"], ind["hist"]
+    MID, SD, BBW, ATR = ind["MID"], ind["SD"], ind["BBW"], ind["ATR"]
 
     def squeeze(i, look=100, pct=0.2, within=6):
         for j in range(i - within, i):
@@ -71,21 +93,19 @@ def run(T, O, H, L, C, revised, timefilter=True, fallback60=False):
 
     trades, skipped, i = [], 0, 100
     while i < n - 1:
-        ok = (allowed_revised(T[i]) if revised else allowed_draft(T[i])) if timefilter else True
-        if revised and T[i].strftime("%H:%M") in ("12:45", "04:00"):
-            ok = False
         side = 0
-        for s in (1, -1):
-            body, rng = (C[i] - O[i]) * s, H[i] - L[i]
-            if revised:
-                strong = body > 0 and body >= 0.5 * rng and body >= 0.5 * ATR[i - 1]
-                mom = hist[i] * s > 0
-            else:
-                strong = body > 0 and body >= 0.6 * rng
-                mom = hist[i] * s > 0 and (hist[i] - hist[i - 1]) * s > 0
-            if ok and (E20[i] - E60[i]) * s > 0 and (C[i] - (MID[i] + 2 * SD[i] * s)) * s > 0 \
-                    and strong and mom and squeeze(i):
-                side = s
+        if allowed is None or allowed(T[i]):
+            for s in (1, -1):
+                body, rng = (C[i] - O[i]) * s, H[i] - L[i]
+                if revised:
+                    strong = body > 0 and body >= 0.5 * rng and body >= 0.5 * ATR[i - 1]
+                    mom = hist[i] * s > 0
+                else:
+                    strong = body > 0 and body >= 0.6 * rng
+                    mom = hist[i] * s > 0 and (hist[i] - hist[i - 1]) * s > 0
+                if (E20[i] - E60[i]) * s > 0 and (C[i] - (MID[i] + 2 * SD[i] * s)) * s > 0 \
+                        and strong and mom and (not squeeze_on or squeeze(i)):
+                    side = s
         if not side:
             i += 1
             continue
@@ -93,9 +113,9 @@ def run(T, O, H, L, C, revised, timefilter=True, fallback60=False):
         ext = L[i] if side > 0 else H[i]
         if revised:
             raw = abs(e - (ext - 0.1 * ATR[i] * side))
-            if raw > 2.0 * ATR[i]:
+            if raw > max_atr * ATR[i]:
                 skipped += 1; i += 1; continue
-            stop = e - min(raw, 1.5 * ATR[i]) * side
+            stop = e - min(raw, stop_atr * ATR[i]) * side
         else:
             stop = ext - 10 * side
             if abs(e - stop) > 90:
@@ -111,36 +131,66 @@ def run(T, O, H, L, C, revised, timefilter=True, fallback60=False):
                 px = stop if (O[j] - stop) * side > 0 else O[j]
                 pnl += units * (px - e) * side; units = 0; break
             if not be:
-                hit = (C[j] - e) * side >= R if revised else ((H[j] if side > 0 else L[j]) - e) * side >= R
+                hit = (C[j] - e) * side >= be_r * R if revised else ((H[j] if side > 0 else L[j]) - e) * side >= R
                 if hit:
                     be, stop = True, e + (COST * side if revised else 0)
             if j + 1 >= n:
                 pnl += units * (C[j] - e) * side; units = 0; break
             active = be if revised else True
-            if active and not partial and (C[j] - E10[j]) * side < 0:
+            if exit_mode == "split" and active and not partial and (C[j] - E10[j]) * side < 0:
                 pnl += (O[j + 1] - e) * side; units -= 1; partial = True
             if active and (C[j] - E20[j]) * side < 0:
                 pnl += units * (O[j + 1] - e) * side; units = 0; j += 1; break
             j += 1
         net = pnl - 2 * COST
-        trades.append((T[i], side, round(R), round(net), round(net / (2 * R), 2)))
+        trades.append(dict(t=T[i], side=side, R=R, pts=net, r=net / (2 * R), bars=j - i))
         i = j
     return trades, skipped
 
 
-def report(name, trades, skipped):
-    tot = sum(t[4] for t in trades)
-    wins = sum(1 for t in trades if t[4] > 0.1)
-    losses = sum(1 for t in trades if t[4] < -0.1)
-    print(f"== {name}：交易 {len(trades)} 筆（勝 {wins}、負 {losses}），停損過遠 {skipped} 次，合計 {tot:+.2f}R")
-    for t in trades:
-        print(f"   {t[0]:%Y-%m-%d %H:%M} {'多' if t[1] > 0 else '空'} R={t[2]} 損益 {t[3]:+} 點 {t[4]:+.2f}R")
+def summary(trades):
+    if not trades:
+        return dict(n=0)
+    rs = [t["r"] for t in trades]
+    eq, peak, dd = 0, 0, 0
+    for r in rs:
+        eq += r; peak = max(peak, eq); dd = min(dd, eq - peak)
+    gain = sum(r for r in rs if r > 0); loss = -sum(r for r in rs if r < 0)
+    return dict(n=len(rs), win=sum(r > 0.1 for r in rs) / len(rs), be=sum(abs(r) <= 0.1 for r in rs) / len(rs),
+                avg=sum(rs) / len(rs), tot=sum(rs), dd=dd, pf=gain / loss if loss else float("inf"),
+                avg_stop=sum(t["R"] for t in trades) / len(trades),
+                hold=statistics.median(t["bars"] for t in trades))
+
+
+def line(name, trades, skipped):
+    s = summary(trades)
+    if not s["n"]:
+        return f"{name}: 0 筆（停損過遠跳過 {skipped}）"
+    return (f"{name}: {s['n']} 筆 勝率 {s['win']:.0%} 保本 {s['be']:.0%} 平均 {s['avg']:+.2f}R "
+            f"合計 {s['tot']:+.1f}R 最大回落 {s['dd']:.1f}R 獲利因子 {s['pf']:.2f} "
+            f"平均停損 {s['avg_stop']:.0f} 點 持有中位數 {s['hold']:.0f} 根（跳過 {skipped}）")
 
 
 if __name__ == "__main__":
-    bars = load(sys.argv[1] if len(sys.argv) > 1 else "tx_60min.csv")
+    path = sys.argv[1] if len(sys.argv) > 1 else "tx_60min.csv"
+    src = sys.argv[2] if len(sys.argv) > 2 else "tx"
+    draft_f, rev_f = (tx_draft, tx_revised) if src == "tx" else (twii_draft, twii_revised)
+    bars = load(path)
+    ind = indicators(*bars)
     print("K 棒", len(bars[0]), "根：", bars[0][0], "~", bars[0][-1])
-    report("原版（停損超過 90 點不做）", *run(*bars, revised=False))
-    report("原版（超過 90 點改固定 60 點）", *run(*bars, revised=False, fallback60=True))
-    report("修訂版", *run(*bars, revised=True))
-    report("修訂版（無時段濾網）", *run(*bars, revised=True, timefilter=False))
+    print(line("草稿版（停損 >90 點不做）", *run(bars, ind, False, draft_f)))
+    print(line("草稿版（>90 點改固定 60 點）", *run(bars, ind, False, draft_f, fallback60=True)))
+    rev, sk = run(bars, ind, True, rev_f)
+    print(line("修訂版", rev, sk))
+    print(line("修訂版（無時段濾網）", *run(bars, ind, True, None)))
+    print(line("修訂版（無擠壓條件）", *run(bars, ind, True, rev_f, squeeze_on=False)))
+    print(line("修訂版（停損 2 ATR）", *run(bars, ind, True, rev_f, stop_atr=2.0, max_atr=2.5)))
+    print(line("修訂版（保本 1.5R）", *run(bars, ind, True, rev_f, be_r=1.5)))
+    print(line("修訂版（只用 EMA20 出場）", *run(bars, ind, True, rev_f, exit_mode="ema20")))
+    by = defaultdict(list)
+    for t in rev:
+        by[t["t"].year].append(t)
+    for y in sorted(by):
+        print(line(f"  修訂版 {y}", by[y], 0))
+    for side, nm in ((1, "多"), (-1, "空")):
+        print(line(f"  修訂版 只看{nm}單", [t for t in rev if t["side"] == side], 0))
