@@ -115,7 +115,7 @@ a {{ color:inherit; }}
 {summary_tiles(bt)}
 <div style="height:8px"></div>
 {table(bt)}
-<p class="note" style="margin-top:16px">規則：見 strategy/v3.py 的 V3。<a href="index.html">回選擇權盤面</a></p>
+<p class="note" style="margin-top:16px">規則：見 strategy/v3.py 的 V3。<a href="live.html">即時訊號（v3＋D2）</a>・<a href="index.html">回選擇權盤面</a></p>
 </main></body></html>
 """
 os.makedirs(os.path.dirname(out_html), exist_ok=True)

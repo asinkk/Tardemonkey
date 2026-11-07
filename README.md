@@ -11,7 +11,7 @@
 | `template.html` | 圖表頁樣板 |
 | `run_txo.bat` / `run_txo.sh` | 給電腦排程器用的啟動檔 |
 | `.github/workflows/txo.yml` | GitHub Actions 每日排程 |
-| `strategy/` | 台指期 60 分K 策略的資料累積與回測（見 `strategy/README.md`） |
+| `strategy/` | 台指期 60 分K（v3）與日K（D2）策略的資料累積、回測與即時訊號頁 `docs/live.html`（見 `strategy/README.md`） |
 
 ## 手動跑
 
