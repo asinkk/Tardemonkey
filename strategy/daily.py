@@ -76,7 +76,7 @@ def run(bars, ind, p, start_i=WARMUP, sig_from=None):
     - 參數都以日K 的 ATR 為單位。"""
     T, O, H, L, C = bars
     n = len(C)
-    E20, E60, hist = ind["E20"], ind["E60"], ind["hist"]
+    E10, E20, E60, hist = ind["E10"], ind["E20"], ind["E60"], ind["hist"]
     MID, SD, ATR = ind["MID"], ind["SD"], ind["ATR"]
     REG = ind.setdefault(("reg", p["regime"]), ema(C, p["regime"]) if p["regime"] else None)
     trades, i = [], start_i
@@ -89,6 +89,10 @@ def run(bars, ind, p, start_i=WARMUP, sig_from=None):
                 if s < 0 and p["shorts"] == "regime" and (C[i] - REG[i]) >= 0:
                     continue
                 if p.get("trend", True) and (E20[i] - E60[i]) * s <= 0:
+                    continue
+                if p.get("slope") and (E60[i] - E60[i - p["slope"]]) * s <= 0:  # EMA60 要往同方向走
+                    continue
+                if p.get("vol_max") and ATR[i] / C[i] > p["vol_max"]:  # 日波動太大的時候不開新倉
                     continue
                 body, rng = (C[i] - O[i]) * s, H[i] - L[i]
                 strong = body > 0 and body >= 0.5 * rng
@@ -109,13 +113,17 @@ def run(bars, ind, p, start_i=WARMUP, sig_from=None):
             i += 1
             continue
         side, kind = sig
-        e = O[i + 1]
+        close_in = p.get("entry_at") == "close"   # 收盤前進場（台指期 13:45 收盤，比加權指數晚 15 分鐘）
+        e = C[i] if close_in else O[i + 1]
+        e += p.get("slip_atr", 0) * ATR[i] * side   # 假設成交比收盤價差（滑價、加權指數與台指期收盤差 15 分鐘）
         ext = L[i] if side > 0 else H[i]
         raw = abs(e - (ext - 0.1 * ATR[i] * side))
         if raw > p.get("max_atr", p["stop_atr"] + 0.5) * ATR[i]:  # 訊號K 端點離進場價太遠（跳空或長K）不做
             i += 1; continue
         stop = e - max(min(raw, p["stop_atr"] * ATR[i]), 0.5 * ATR[i]) * side
         R = abs(e - stop)
+        if p.get("cap_pts") and R > p["cap_pts"]:  # 停損點數超過上限（1 口微台的金額風險太大）不做
+            i += 1; continue
         pnl, be, j, best = 0.0, False, i + 1, e
         stop0, xt, xp, still_open, why = stop, None, None, False, ""
         while j < n:
@@ -132,9 +140,10 @@ def run(bars, ind, p, start_i=WARMUP, sig_from=None):
                 pnl = (C[j] - e) * side; xt, xp, still_open, why = T[j], C[j], True, "持倉中"
                 break
             if be:
-                if p["exit"] == "ema20":
-                    if (C[j] - E20[j]) * side < 0:
-                        pnl = (O[j + 1] - e) * side; xt, xp, why = T[j + 1], O[j + 1], "跌破EMA20"; j += 1; break
+                if p["exit"] in ("ema20", "ema10"):
+                    EX = E20 if p["exit"] == "ema20" else E10
+                    if (C[j] - EX[j]) * side < 0:
+                        pnl = (O[j + 1] - e) * side; xt, xp, why = T[j + 1], O[j + 1], "跌破" + p["exit"].upper(); j += 1; break
                 else:
                     best = max(best * side, C[j] * side) * side
                     trail = best - p["exit"] * ATR[j] * side
@@ -142,7 +151,7 @@ def run(bars, ind, p, start_i=WARMUP, sig_from=None):
                         stop = trail
             j += 1
         net = pnl - COST
-        trades.append(dict(t=T[i], side=side, kind=kind, R=R, r=net / R, bars=j - i, entry=e, entry_t=T[i + 1],
+        trades.append(dict(t=T[i], side=side, kind=kind, R=R, r=net / R, bars=j - i, entry=e, entry_t=T[i] if close_in else T[i + 1],
                            stop0=stop0, stop=stop, exit_t=xt, exit=xp, open=still_open, be=be, why=why))
         i = j
     return trades
@@ -182,6 +191,8 @@ D_V3 = dict(entry="bb", body_atr=0.8, pullback=True, stop_atr=1.5, be_r=1.0, exi
 # 日K 調整版（2026-11-07，前段挑參數，見 README）
 # 收盤創 20 日新高（新低）、實體 ≥ 高低差 50%、EMA20 > EMA60；停損 1 ATR、1R 保本、保本後收盤跌破 EMA20 出場
 D1 = dict(entry=20, body_atr=0.0, macd=False, pullback=False, stop_atr=1.0, be_r=1.0, exit="ema20", shorts="all", regime=120)
+# D2（2026-11-07 第二次調整）：D1 改成訊號當天收盤前進場（加權指數 13:30 收盤後、台指期 13:45 收盤前），不等隔天開盤
+D2 = dict(D1, entry_at="close")
 
 
 def load_all(twii_path, tx_dir=None):
@@ -217,7 +228,7 @@ if __name__ == "__main__":
                 sp, si, i0, off = data[key]
                 print(f"   台指期1月{'(日夜)' if key == 'tx' else '(只日盤)'}", fmt(stats(run(sp, si, p, sig_from=i0))))
 
-    for name, cfg in (("v3 條件直接搬到日K", D_V3), ("日K 調整版 D1", D1)):
+    for name, cfg in (("v3 條件直接搬到日K", D_V3), ("日K 調整版 D1", D1), ("日K D2（收盤進場）", D2)):
         print("==", name)
         tr = run(b, ind, cfg)
         show(cfg, stats([x for x in tr if x["t"] < SPLIT]), stats([x for x in tr if x["t"] >= SPLIT]), stats(tr))

@@ -40,3 +40,8 @@ D1 = 收盤創 20 日新高（新低）、紅K實體 ≥ 高低差 50%、日 EMA
 python strategy/daily.py history/twii_60min.csv history/tx_1min
 python strategy/daily_compare.py history/twii_60min.csv history/tx_1min d1_trades.csv
 ```
+
+D2（同日第二次調整）：D1 改成訊號當天收盤前進場（加權指數 13:30 收盤確認、台指期 13:45 收盤前下單），其他不變。
+21 筆 +70.9R；20 萬元 1 口微台近 2 年期末 352,205 元（含 11/5 空單未實現 18,219 元），最大回落 31,626 元。
+假設每筆進場多滑 0.1 ATR 仍有 346 千元左右；停損 0.5 ATR 的版本帳面更高，但多滑 0.05 ATR 就從 358 千元掉到 297 千元，所以不採用。
+`daily.py` 的新選項：`entry_at`（open/close）、`slip_atr`、`cap_pts`（停損點數上限）、`vol_max`（ATR/價格上限）、`slope`、`exit="ema10"`。

@@ -66,12 +66,14 @@ if __name__ == "__main__":
         "v3（60 分K）": lambda: [x for x in v3.run(hb, hind, twii_revised, "13:00", v3.V3) if x["t"] >= START],
         "v3 條件直接搬到日K": lambda: daily.run(db, dind, daily.D_V3),
         "日K D1": lambda: daily.run(db, dind, daily.D1),
+        "日K D2（收盤進場）": lambda: daily.run(db, dind, daily.D2),
         "混合：日K方向+60分K": lambda: [x for x in v3.run(hb, hind, twii_revised, "13:00", HYB) if x["t"] >= START],
     }
     txs = {
         "v3（60 分K）": lambda: [x for x in v3.run(tb, tind, tx_revised, "12:45", v3.V3) if x["t"] >= tx_start],
         "v3 條件直接搬到日K": lambda: daily.run(sp, si, daily.D_V3, sig_from=i0),
         "日K D1": lambda: daily.run(sp, si, daily.D1, sig_from=i0),
+        "日K D2（收盤進場）": lambda: daily.run(sp, si, daily.D2, sig_from=i0),
         "混合：日K方向+60分K": lambda: [x for x in v3.run(tb, tind, tx_revised, "12:45", HYB) if x["t"] >= tx_start],
     }
     res = {k: f() for k, f in strat.items()}
@@ -91,13 +93,13 @@ if __name__ == "__main__":
             pk = max(pk, c); mdd = min(mdd, (c - pk) * MULT)
         print(f"對照：{cut:%Y/%m/%d} 起 1 口微台買進持有 期末 {CAP + (C[-1] - C[i]) * MULT - 2 * FEE:,.0f}，回落 {mdd:,.0f}")
 
-    print("== 日K D1 交易明細（加權指數）")
-    m = money(res["日K D1"])
+    print("== 日K D2 交易明細（加權指數）")
+    m = money(res["日K D2（收盤進場）"])
     for x in m["rows"]:
         print(f"{x['t']:%Y-%m-%d} {x['kind']} {'多' if x['side'] > 0 else '空'} 進 {x['entry']:.0f} 停損 {x['R']:.0f} 點 "
               f"出 {x['exit_t']:%Y-%m-%d} {x['exit']:.0f} {x['why']} {x['r']:+.2f}R {x['twd']:+,.0f} 元 帳戶 {x['eq']:,.0f}")
-    print("== 日K D1 台指期 1 個月明細")
-    for x in money(txs["日K D1"]())["rows"]:
+    print("== 日K D2 台指期 1 個月明細")
+    for x in money(txs["日K D2（收盤進場）"]())["rows"]:
         print(f"{x['t']:%Y-%m-%d} {'多' if x['side'] > 0 else '空'} 進 {x['entry_t']:%m/%d} {x['entry']:.0f} 停損 {x['R']:.0f} 點 "
               f"出 {x['exit_t']:%m/%d} {x['exit']:.0f} {x['why']} {x['r']:+.2f}R {x['twd']:+,.0f} 元")
 
