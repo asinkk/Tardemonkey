@@ -75,19 +75,20 @@ def run(bars, ind, allowed, last_bar, p, start=None, end=None):
         stop = e - max(min(raw, p["stop_atr"] * ATR[i]), 0.5 * ATR[i]) * side
         R = abs(e - stop)
         pnl, be, j, best = 0.0, False, i + 1, e
+        stop0, xt, xp, still_open = stop, None, None, False
         while j < n:
             worst = L[j] if side > 0 else H[j]
             if (worst - stop) * side <= 0:
                 px = stop if (O[j] - stop) * side > 0 else O[j]
-                pnl = (px - e) * side; break
+                pnl = (px - e) * side; xt, xp = T[j], px; break
             if not be and (C[j] - e) * side >= p["be_r"] * R:
                 be, stop = True, e + COST * side
             if j + 1 >= n:
-                pnl = (C[j] - e) * side; break
+                pnl = (C[j] - e) * side; xt, xp, still_open = T[j], C[j], True; break
             if be:
                 if p["exit"] == "ema20":
                     if (C[j] - E20[j]) * side < 0:
-                        pnl = (O[j + 1] - e) * side; j += 1; break
+                        pnl = (O[j + 1] - e) * side; xt, xp = T[j + 1], O[j + 1]; j += 1; break
                 else:  # chandelier k
                     best = max(best * side, C[j] * side) * side
                     trail = best - p["exit"] * ATR[j] * side
@@ -95,7 +96,8 @@ def run(bars, ind, allowed, last_bar, p, start=None, end=None):
                         stop = trail
             j += 1
         net = pnl - COST
-        trades.append(dict(t=T[i], side=side, kind=kind, R=R, r=net / R, bars=j - i))
+        trades.append(dict(t=T[i], side=side, kind=kind, R=R, r=net / R, bars=j - i, entry=e, entry_t=T[i + 1],
+                           stop0=stop0, stop=stop, exit_t=xt, exit=xp, open=still_open, be=be))
         i = j
     return trades
 

@@ -26,11 +26,13 @@ jobs:
         run: python strategy/collect_ticks.py history/tx_1min
       - name: 更新加權指數 60 分K（Yahoo）
         run: python strategy/fetch_twii.py history/twii_60min.csv || echo "Yahoo 抓取失敗，略過"
+      - name: v3 前測（模擬交易紀錄與網頁）
+        run: cd strategy && python forward.py ../history/tx_1min ../docs/strategy.html ../history/forward_trades.csv
       - name: 存回 repo
         run: |
           git config user.name "txo-bot"
           git config user.email "txo-bot@users.noreply.github.com"
-          git add history/tx_1min history/twii_60min.csv
+          git add history/tx_1min history/twii_60min.csv history/forward_trades.csv docs/strategy.html
           git diff --cached --quiet && exit 0
           git commit -m "累積台指期 1 分K $(TZ=Asia/Taipei date '+%F')"
           git pull --rebase origin main

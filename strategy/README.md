@@ -10,6 +10,7 @@
 | `backtest.py` | 回測草稿版、修訂版 v1、v2 與幾個參數變化 |
 | `optimize.py` | v2 參數搜尋：前 16 個月挑參數，後 8 個月驗證 |
 | `simulate.py` | 固定口數試算帳戶金額（預設 20 萬、1 口微台、每次下單 25 元），含買進持有對照 |
+| `forward.py` | v3 前測：每天用累積的台指期日夜盤資料跑 v3，輸出 `docs/strategy.html` 與 `history/forward_trades.csv`（2026/11/9 起算前測） |
 | `v3.py` | v3：加上拉回進場、5 ATR 移動停利、日線濾網選項，含參數搜尋 |
 
 期交所只留最近 30 個交易日，`.github/workflows/tx-ticks.yml` 每天台北 06:30 自動存一次，資料會越累積越長。
