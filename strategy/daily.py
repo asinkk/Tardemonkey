@@ -112,7 +112,7 @@ def run(bars, ind, p, start_i=WARMUP, sig_from=None):
         e = O[i + 1]
         ext = L[i] if side > 0 else H[i]
         raw = abs(e - (ext - 0.1 * ATR[i] * side))
-        if raw > (p["stop_atr"] + 0.5) * ATR[i]:  # 跳空追太高不做
+        if raw > p.get("max_atr", p["stop_atr"] + 0.5) * ATR[i]:  # 訊號K 端點離進場價太遠（跳空或長K）不做
             i += 1; continue
         stop = e - max(min(raw, p["stop_atr"] * ATR[i]), 0.5 * ATR[i]) * side
         R = abs(e - stop)
