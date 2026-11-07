@@ -17,7 +17,7 @@ Private Const DAILY_URL As String = "https://www.taifex.com.tw/cht/3/futDataDown
 ' HTTP
 ' ------------------------------------------------------------
 Public Function HttpBytes(ByVal url As String, Optional ByVal body As String = "", Optional ByVal ctype As String = "") As Variant
-    Dim h As Object, tries As Long, b() As Byte, i As Long, st As Long, lastErr As String
+    Dim h As Object, tries As Long, st As Long, lastErr As String
     For tries = 1 To 3
         On Error Resume Next
         Err.Clear
@@ -36,11 +36,7 @@ Public Function HttpBytes(ByVal url As String, Optional ByVal body As String = "
         h.setRequestHeader "Cache-Control", "no-cache"
         If Len(body) > 0 Then
             h.setRequestHeader "Content-Type", ctype
-            ReDim b(0 To Len(body) - 1)
-            For i = 1 To Len(body)
-                b(i - 1) = AscW(Mid$(body, i, 1)) And &HFF&      ' 內容都是 ASCII
-            Next
-            h.send b
+            h.send body      ' 直接送字串（跟盤面版 TXO.bas 一樣；送 Byte 陣列會被 MSXML 回「參數錯誤」）
         Else
             h.send
         End If
