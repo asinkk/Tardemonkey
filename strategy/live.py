@@ -541,7 +541,7 @@ def main():
     }
     os.makedirs(a.out, exist_ok=True)
     json.dump(data, open(os.path.join(a.out, "live.json"), "w", encoding="utf-8"), ensure_ascii=False, indent=1, default=str)
-    open(os.path.join(a.out, "live.html"), "w", encoding="utf-8").write(render(data, now))
+    open(os.path.join(a.out, "live_github.html"), "w", encoding="utf-8").write(render(data, now))
     tw60 = load(a.twii)
     tws = trades_page.twii_backtests(tw60, tw, refine_times)
     tx = {"v3": [trade_row(x, last_c) for x in hv["trades"]], "d2": [trade_row(x, last_c) for x in hd["trades"]]}
