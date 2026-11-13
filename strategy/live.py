@@ -27,9 +27,8 @@ CAP, MULT, FEE = 200000, 10, 25                   # 本金 20 萬、1 口微台�
 # 不限時段版 2026-11-13 依 Monkey 要求拿掉。
 # v3lock 是 2026-11-13 加的鎖利版（v3.V3_LOCK），跟原本的 v3 並列方便比對；它的前測從 11/16 起算。
 STRATS = (("v3", tx_revised, v3.V3, FORWARD_START),
-          ("v3lock", tx_revised, v3.V3_LOCK, dt.datetime(2026, 11, 16, 8, 45)),
-          ("v3tp3", tx_revised, v3.V3_TP3, dt.datetime(2026, 11, 16, 8, 45)))   # 固定 3R 停利版，同樣是比對用
-NAMES = {"v3": "v3（限時段）", "v3lock": "v3 鎖利版（限時段）", "v3tp3": "v3 固定 3R 停利版（限時段）"}
+          ("v3lock", tx_revised, v3.V3_LOCK, dt.datetime(2026, 11, 16, 8, 45)))
+NAMES = {"v3": "v3（限時段）", "v3lock": "v3 鎖利版（限時段）"}
 TRADES_START = dt.datetime(2026, 9, 21)           # 歷史成交紀錄頁只列這天起（有完整日夜盤 1 分K）的交易
 
 
@@ -188,8 +187,6 @@ def evaluate(bars, runner, step):
 
 # ---------- 進出場時間（精確到分鐘） ----------
 def exit_reason_v3(x):
-    if x.get("hit"):
-        return "固定停利" + ("（跳空成交）" if round(x["exit"]) != round(x["target"]) else "")
     why = "移動停利" if (x["stop"] - x["entry"]) * x["side"] > COST else "保本停損" if x["be"] else "初始停損"
     return why + ("（跳空成交）" if round(x["exit"]) != round(x["stop"]) else "")
 
@@ -211,8 +208,7 @@ def refine_times(trades, m):
         x.setdefault("why", "" if x["open"] else exit_reason_v3(x))
         if x["open"]:
             continue
-        px, sd = (x["target"], -x["side"]) if x.get("hit") else (x["stop"], x["side"])   # 停利看的是另一邊的端點
-        t = first_touch(mT, m, x["exit_t"], x["exit_t"] + dt.timedelta(minutes=60), px, sd)
+        t = first_touch(mT, m, x["exit_t"], x["exit_t"] + dt.timedelta(minutes=60), x["stop"], x["side"])
         if t:
             x["exit_t"] = t
     return trades
@@ -339,7 +335,6 @@ def main():
              "trail_note": (f"保本後停損改成「進場後{'最高收盤 − 5 ATR' if x['side'] > 0 else '最低收盤 + 5 ATR'}」，只往有利方向移動；"
                             + (f"獲利達 {lock[0]:g}R（收盤到 {x['entry'] + lock[0] * R * x['side']:,.0f}）後，"
                                f"停損至少鎖住最大收盤獲利的 {lock[1]:.0%}；" if lock else "") +
-                            (f"盤中碰到 {x['target']:,.0f}（{r['params']['target']:g}R）就全部停利出場；" if x.get("target") else "") +
                             f"目前 ATR {r['ind']['ATR'][-1]:,.0f}")}
         if r["pending_exit"]:
             d["pending_exit"] = f"{why_text(r['pending_exit']) or '出場條件成立'}：下一根 K 開盤出場"
@@ -572,10 +567,8 @@ footer {{ margin:20px 0 40px; }}
 <div>
 {strat_card("v3・60 分K（限時段）", f"60 分K 收完才看訊號；日盤 08:45–11:45、夜盤 {night_win} 開始的 K 才開新倉", d["v3"], d["prev_generated"][5:])}
 {strat_card("v3 鎖利版・60 分K（限時段）", "進場與 v3 完全相同；出場多一條：最高收盤獲利達 3R 後，停損至少鎖住其中 33%（2026/11/13 新增，比對用）", d["v3lock"], d["prev_generated"][5:])}
-{strat_card("v3 固定 3R 停利版・60 分K（限時段）", "進場與 v3 完全相同；出場多一條：盤中碰到「進場價 ± 3R」就全部停利出場（2026/11/13 新增，比對用）", d["v3tp3"], d["prev_generated"][5:])}
 {record_html("v3（限時段）模擬交易紀錄", d["v3"]["record"])}
 {record_html("v3 鎖利版（限時段）模擬交易紀錄", d["v3lock"]["record"])}
-{record_html("v3 固定 3R 停利版（限時段）模擬交易紀錄", d["v3tp3"]["record"])}
 </div>
 <footer>
 <p class="note">GitHub Actions 在交易時段大約每 30 分鐘更新一次：日盤台北 08:48–13:48（:18、:48），
@@ -585,7 +578,7 @@ footer {{ margin:20px 0 40px; }}
 <p class="note">「形成中」表示那根 K 還沒收完，條件是用現價先算，收K前都可能變。訊號要等 60 分K 收完、下一根開盤才進場。
 試算：本金 20 萬、1 口微台（每點 10 元）、每次下單 25 元；R 是以初始停損點數為 1 的倍數。</p>
 <p class="note"><b>資料：訊號、部位、停損都只用台指期近月（TX）日盤＋夜盤 60 分K</b>：期交所每筆成交轉 1 分K（history 到 {esc(d['history_last'])}）＋期交所即時 1 分K。
-規則：<code>strategy/v3.py</code> 的 V3、V3_LOCK（鎖利版）、V3_TP3（固定 3R 停利版），開倉時段用 <code>backtest.tx_revised</code>。
+規則：<code>strategy/v3.py</code> 的 V3 與 V3_LOCK（鎖利版），開倉時段用 <code>backtest.tx_revised</code>。
 <a href="trades.html">歷史成交紀錄</a>・<a href="strategy.html">v3 前測（每日）</a></p>
 </footer>
 </main>

@@ -91,12 +91,11 @@ a {{ color:var(--accent); }}
 footer {{ margin:20px 0 40px; }}
 </style></head><body><main>
 <h1>台指策略成交紀錄</h1>
-<p class="asof">v3、v3 鎖利版、v3 固定 3R 停利版 60 分K（限時段）每一筆模擬交易・台北 {now:%Y-%m-%d %H:%M} 產生・台指期持倉以現價 {last_c:,.0f} 計</p>
-<nav><a href="live.html">← 即時訊號</a><a href="#tx-v3">v3</a><a href="#tx-v3lock">v3 鎖利版</a><a href="#tx-v3tp3">v3 固定 3R 停利版</a></nav>
+<p class="asof">v3 與 v3 鎖利版 60 分K（限時段）每一筆模擬交易・台北 {now:%Y-%m-%d %H:%M} 產生・台指期持倉以現價 {last_c:,.0f} 計</p>
+<nav><a href="live.html">← 即時訊號</a><a href="#tx-v3">v3</a><a href="#tx-v3lock">v3 鎖利版</a></nav>
 <p class="part">台指期近月（{esc(tx_start)} 起有完整日盤＋夜盤資料，60 分K）</p>
 <div id="tx-v3">{section("v3・60 分K（限時段）", "只在日盤 08:45–11:45、夜盤 21:00–23:00（美國冬令 22:00–00:00）開始的 60 分K 開新倉。進場是訊號 K 收完後下一根 60 分K 開盤；停損出場時間是 1 分K 第一次碰到停損的那一分鐘。「前測」是 2026/11/9 規則定案後的交易。", tx["v3"], cap, True)}</div>
 <div id="tx-v3lock">{section("v3 鎖利版・60 分K（限時段）", "進場與上面的 v3 完全相同；出場多一條鎖利：進場後最高收盤獲利達 3R 後，停損至少拉到「進場價 + 最高收盤獲利的 33%」。2026/11/13 新增，跟原本 v3 並列比對；「前測」是 2026/11/16 起的交易。", tx["v3lock"], cap, True)}</div>
-<div id="tx-v3tp3">{section("v3 固定 3R 停利版・60 分K（限時段）", "進場與上面的 v3 完全相同；出場多一條固定停利：盤中碰到「進場價 ± 3 倍初始停損點數」就全部出場，出場後有新訊號會再進場，所以筆數比較多。2026/11/13 新增，跟原本 v3 並列比對；「前測」是 2026/11/16 起的交易。", tx["v3tp3"], cap, True)}</div>
 <footer><p class="note">試算：本金 {cap:,} 元、固定 1 口微台（每點 {mult} 元）、每次下單 {fee} 元（來回 {2 * fee} 元）；點數是進出場價差，損益（元）已扣下單費用；R 是以初始停損點數為 1 的倍數（另扣 {cost} 點滑價成本）。
 台指期價格已換算成目前近月合約（換月時回溯調整），所以早期的價格會跟當時實際報價差一個價差。每半小時跟即時訊號頁一起更新。</p>
 <p class="note"><a href="live.html">即時訊號</a>・<a href="strategy.html">v3 前測（每日）</a></p></footer>
