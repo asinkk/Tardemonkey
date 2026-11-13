@@ -185,7 +185,7 @@ def evaluate(bars, runner, step):
 
 # ---------- 進出場時間（精確到分鐘） ----------
 def exit_reason_v3(x):
-    why = "移動停利" if (x["stop"] - x["entry"]) * x["side"] > COST else "保本停損" if x["be"] else "初始停損"
+    why = "移動停利／鎖利" if (x["stop"] - x["entry"]) * x["side"] > COST else "保本停損" if x["be"] else "初始停損"
     return why + ("（跳空成交）" if round(x["exit"]) != round(x["stop"]) else "")
 
 
@@ -330,6 +330,7 @@ def main():
              "pts": round(pts), "twd": round(pts * MULT - FEE), "to_stop": round((last_c - x["stop"]) * x["side"]),
              "be_at": round(x["entry"] + 1.0 * R * x["side"]),
              "trail_note": (f"保本後停損改成「進場後{'最高收盤 − 5 ATR' if x['side'] > 0 else '最低收盤 + 5 ATR'}」，只往有利方向移動；"
+                            f"獲利達 3R（收盤到 {x['entry'] + 3 * R * x['side']:,.0f}）後，停損至少鎖住最大收盤獲利的 33%；"
                             f"目前 ATR {r['ind']['ATR'][-1]:,.0f}")}
         if r["pending_exit"]:
             d["pending_exit"] = f"{why_text(r['pending_exit']) or '出場條件成立'}：下一根 K 開盤出場"
