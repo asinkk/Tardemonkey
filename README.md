@@ -7,7 +7,7 @@
 
 | 檔案 | 用途 |
 | --- | --- |
-| `strategy/v3.py` | v3 規則（拉回進場、5 ATR 移動停利、獲利 3R 後鎖利 33%、日線濾網選項） |
+| `strategy/v3.py` | v3 規則（拉回進場、5 ATR 移動停利、日線濾網選項；`V3_LOCK` 是鎖利版：獲利 3R 後停損至少鎖住 33%，網頁上跟 v3 並列比對） |
 | `strategy/backtest.py` | 指標、開倉時段（`tx_revised`）、手續費等共用函式 |
 | `strategy/build_bars.py` | 1 分K 合成近月連續 60 分K（日盤 08:45 起、夜盤 15:00 起，換月回溯調整） |
 | `strategy/collect_ticks.py` | 下載期交所前 30 個交易日每筆成交，轉成 1 分K 存到 `history/tx_1min/` |
