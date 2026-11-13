@@ -76,11 +76,15 @@ def run(bars, ind, allowed, last_bar, p, start=None, end=None):
         R = abs(e - stop)
         pnl, be, j, best = 0.0, False, i + 1, e
         stop0, xt, xp, still_open = stop, None, None, False
+        tgt, hit = (e + p["target"] * R * side if p.get("target") else None), False
         while j < n:
             worst = L[j] if side > 0 else H[j]
             if (worst - stop) * side <= 0:
                 px = stop if (O[j] - stop) * side > 0 else O[j]
                 pnl = (px - e) * side; xt, xp = T[j], px; break
+            if tgt is not None and ((H[j] if side > 0 else L[j]) - tgt) * side >= 0:  # 固定停利：碰到目標價全部出場；跳空時以開盤價成交
+                px = tgt if (O[j] - tgt) * side < 0 else O[j]
+                pnl = (px - e) * side; xt, xp, hit = T[j], px, True; break
             if not be and (C[j] - e) * side >= p["be_r"] * R:
                 be, stop = True, e + COST * side
             if j + 1 >= n:
@@ -102,7 +106,7 @@ def run(bars, ind, allowed, last_bar, p, start=None, end=None):
             j += 1
         net = pnl - COST
         trades.append(dict(t=T[i], side=side, kind=kind, R=R, r=net / R, bars=j - i, entry=e, entry_t=T[i + 1],
-                           stop0=stop0, stop=stop, exit_t=xt, exit=xp, open=still_open, be=be))
+                           stop0=stop0, stop=stop, exit_t=xt, exit=xp, open=still_open, be=be, target=tgt, hit=hit))
         i = j
     return trades
 
@@ -135,13 +139,17 @@ GRID = dict(
     be_r=[1.0, 1.5],
     exit=["ema20", 3.0, 4.0, 5.0, 6.0],
     lock=[None, (3.0, 0.33)],
+    target=[None, 3.0],
 )
-V2 = dict(regime=None, longs="all", shorts="all", pullback=False, body_atr=0.8, stop_atr=1.5, be_r=1.0, exit="ema20", lock=None)
+V2 = dict(regime=None, longs="all", shorts="all", pullback=False, body_atr=0.8, stop_atr=1.5, be_r=1.0, exit="ema20", lock=None, target=None)
 # v3（2026-11-07）：v2 + 拉回進場 + 保本後改用「最高收盤 − 5 ATR」移動停利
 V3 = dict(V2, pullback=True, exit=5.0)
 # v3 鎖利版（2026-11-13）：v3 + 最高收盤獲利達 3R 後，停損至少拉到「進場價 + 最高收盤獲利的 33%」
 # （台指期 9/21 起 +9.6R → +11.8R；加權指數 3 年 +75.1R → +75.5R，勝率 26% → 32%）
 V3_LOCK = dict(V3, lock=(3.0, 0.33))
+# v3 固定 3R 停利版（2026-11-13，比對用）：v3 + 盤中碰到「進場價 ± 3R」就全部出場
+# （台指期 9/21 起 +17.6R；加權指數 3 年 +50.1R，比 v3 的 +75.1R 少，因為吃不到大行情）
+V3_TP3 = dict(V3, target=3.0)
 # v3 保守版：空單只在加權指數日收盤低於 120 日 EMA 時做（回落較小、交易較少）
 V3_SAFE = dict(V3, regime=120, shorts="regime")
 
@@ -163,7 +171,7 @@ if __name__ == "__main__":
         print(p); print("   前段", fmt(ins)); print("   後段", fmt(oos)); print("   全部", fmt(al))
         if tx:
             print("   台指期1月", fmt(stats(run(tx[0], tx[1], tx_revised, "12:45", p))))
-    for name, cfg in (("v2", V2), ("v3", V3), ("v3 鎖利版", V3_LOCK), ("v3 保守版", V3_SAFE)):
+    for name, cfg in (("v2", V2), ("v3", V3), ("v3 鎖利版", V3_LOCK), ("v3 固定 3R 停利版", V3_TP3), ("v3 保守版", V3_SAFE)):
         print(f"== {name}")
         for r in res:
             if r[0] == cfg: show(*r)
