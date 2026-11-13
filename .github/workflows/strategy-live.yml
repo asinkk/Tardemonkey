@@ -27,7 +27,7 @@ jobs:
       - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
-      - name: 抓即時 1 分K，算 v3（限時段／不限時段）目前狀態
+      - name: 抓即時 1 分K，算 v3（限時段）目前狀態
         run: python strategy/live.py --out docs
       - name: 存回 repo
         run: |
