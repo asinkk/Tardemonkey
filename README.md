@@ -21,6 +21,9 @@ python strategy/live.py --out docs              # 抓即時資料
 python strategy/live.py --out /tmp/x --offline  # 只用 history
 ```
 
+網頁：https://asinkk.github.io/Tardemonkey/live.html（Settings → Pages 設 main 分支的 /docs）
+
 排程（GitHub Actions，時間可能晚 5–30 分鐘或漏跑）：
 - `strategy-live.yml`：交易時段每半小時更新即時訊號頁（日盤台北 :18/:48，夜盤 :04/:34）。
 - `tx-ticks.yml`：每天台北 06:30 存期交所 1 分K（期交所只留 30 個交易日）、更新加權指數、跑前測與即時訊號頁。
+- `clock.yml`（排程鬧鐘）：GitHub 的 schedule 常延誤，鬧鐘在長時間 job 裡照上面兩個 workflow 的 cron 準時觸發它們。
