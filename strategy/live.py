@@ -1,35 +1,33 @@
-"""即時策略看板：台指期 v3（60 分K）兩個版本目前的訊號、部位、停損與進場條件。
-  - v3：原規則，只在日盤 08:45–11:45、夜盤 21:00–23:00（美國冬令 22:00–00:00）開始的 60 分K 開新倉
-  - v3 不限時段：規則相同，但日夜盤任何一根 60 分K 收完都可以開新倉
+"""即時策略看板：台指期 v3（60 分K，限時段）目前的訊號、部位、停損與進場條件。
+  - 只在日盤 08:45–11:45、夜盤 21:00–23:00（美國冬令 22:00–00:00）開始的 60 分K 開新倉
 
 資料：
   - history/tx_1min/：每天台北 06:30 存的期交所每筆成交（轉成 1 分K）
   - 期交所 MIS 即時 1 分K（getChartData1M）：補上目前或最近一個日盤、夜盤還沒存進 history 的部分
 訊號、部位、停損全部只用台指期近月的日盤＋夜盤 60 分K。
-加權指數（history/twii_60min.csv）只用在歷史成交紀錄頁的回測，不影響這裡的訊號。
 策略規則完全沿用 v3.run（V3），這裡只負責接資料、判斷最後一根 K 是否已收完、
 把結果整理成網頁。條件明細（✓/✗）是顯示用的重算，判斷進出場以 run() 的結果為準。
 
-用法：python strategy/live.py [--src history/tx_1min] [--twii history/twii_60min.csv] [--out docs] [--offline]
+用法：python strategy/live.py [--src history/tx_1min] [--out docs] [--offline]
 """
 import argparse, bisect, csv, datetime as dt, glob, html, json, os, shutil, sys, tempfile, urllib.request
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from build_bars import build
-from backtest import load, indicators, tx_revised, us_dst, COST
+from backtest import indicators, tx_revised, us_dst, COST
 import v3
 import trades_page
 import collect_ticks
 
 MIS = "https://mis.taifex.com.tw/futures/api/"
 MONTHS = "ABCDEFGHIJKL"
-FORWARD_START = dt.datetime(2026, 11, 9, 8, 45)   # v3 規則 11/7 定案，11/9 起算前測（不限時段版沿用同一天，之前都算回測）
+FORWARD_START = dt.datetime(2026, 11, 9, 8, 45)   # v3 規則 11/7 定案，11/9 起算前測（之前都算回測）
 CAP, MULT, FEE = 200000, 10, 25                   # 本金 20 萬、1 口微台（每點 10 元）、每次下單 25 元
-# 兩個版本規則都是 v3.V3，只差「哪些時段開始的 60 分K 可以開新倉」：
-#   v3    日盤 08:45–11:45、夜盤 21:00–23:00（美國冬令 22:00–00:00）開始的 K（backtest.tx_revised）
-#   v3all 不限時段，日夜盤任何一根 60 分K 收完都可以開新倉（Monkey 2026-11-10 要求加這一版並列）
-STRATS = (("v3", tx_revised), ("v3all", None))
-NAMES = {"v3": "v3（限時段）", "v3all": "v3 不限時段"}
+# 規則是 v3.V3，只在日盤 08:45–11:45、夜盤 21:00–23:00（美國冬令 22:00–00:00）開始的 K 開新倉（backtest.tx_revised）。
+# 不限時段版 2026-11-13 依 Monkey 要求拿掉。
+STRATS = (("v3", tx_revised),)
+NAMES = {"v3": "v3（限時段）"}
+TRADES_START = dt.datetime(2026, 9, 21)           # 歷史成交紀錄頁只列這天起（有完整日夜盤 1 分K）的交易
 
 
 def now_tpe():
@@ -280,7 +278,6 @@ def main():
     ap = argparse.ArgumentParser()
     here = os.path.dirname(os.path.abspath(__file__))
     ap.add_argument("--src", default=os.path.join(here, "..", "history", "tx_1min"))
-    ap.add_argument("--twii", default=os.path.join(here, "..", "history", "twii_60min.csv"))
     ap.add_argument("--out", default=os.path.join(here, "..", "docs"))
     ap.add_argument("--offline", action="store_true", help="不抓即時分K，只用 history")
     ap.add_argument("--now", help="測試用：假裝現在是台北時間 YYYY-mm-ddTHH:MM")
@@ -312,7 +309,7 @@ def main():
     hb = (T, *([r[k] for r in rows] for k in range(1, 5)))
     last_c = hb[4][-1]
 
-    # 最後一根 60 分K 收完了沒（兩個版本用同一套 K 棒）
+    # 最後一根 60 分K 收完了沒
     v3_end = T[-1] + dt.timedelta(minutes=60)
     v3_forming = now < v3_end
     res = {}
@@ -391,10 +388,9 @@ def main():
     os.makedirs(a.out, exist_ok=True)
     json.dump(data, open(os.path.join(a.out, "live.json"), "w", encoding="utf-8"), ensure_ascii=False, indent=1, default=str)
     open(os.path.join(a.out, "live.html"), "w", encoding="utf-8").write(render(data, now))
-    tws = trades_page.twii_backtests(load(a.twii), refine_times)
-    tx = {key: [trade_row(x, last_c) for x in res[key]["trades"]] for key, _ in STRATS}
+    tx = [trade_row(x, last_c) for x in res["v3"]["trades"] if x["entry_t"] >= TRADES_START]
     open(os.path.join(a.out, "trades.html"), "w", encoding="utf-8").write(
-        trades_page.render(tx, tws, now, last_c, f"{T[0]:%Y-%m-%d}", (CAP, MULT, FEE, COST), trade_row))
+        trades_page.render(tx, now, last_c, f"{max(T[0], TRADES_START):%Y-%m-%d}", (CAP, MULT, FEE, COST)))
     print(f"現價 {last_c:,.0f}；history 到 {hist_last}，補上即時 {added} 分鐘；" + "；".join(
         f"{NAMES[k]} {'持倉' if res[k]['pos'] else '空手'}{'、訊號' if res[k]['sig'] else ''}" for k, _ in STRATS))
 
@@ -565,21 +561,19 @@ footer {{ margin:20px 0 40px; }}
 {gap}{errs}
 <div class="cols">
 {strat_card("v3・60 分K（限時段）", f"60 分K 收完才看訊號；日盤 08:45–11:45、夜盤 {night_win} 開始的 K 才開新倉", d["v3"], d["prev_generated"][5:])}
-{strat_card("v3 不限時段・60 分K", "規則跟 v3 一樣，但日盤、夜盤任何一根 60 分K 收完都可以開新倉", d["v3all"], d["prev_generated"][5:])}
 </div>
 <div class="cols">
 {record_html("v3（限時段）模擬交易紀錄", d["v3"]["record"])}
-{record_html("v3 不限時段 模擬交易紀錄", d["v3all"]["record"])}
 </div>
 <footer>
 <p class="note">GitHub Actions 在交易時段大約每 30 分鐘更新一次：日盤台北 08:48–13:48（:18、:48），
 夜盤 15:04–05:04（:04、:34）。GitHub 的排程是盡力而為，常晚 5–30 分鐘，偶爾會漏跑，所以請看上面的「資料到」時間，不要拿這頁當下單依據。
 每次更新都從期交所重新抓整個日盤、夜盤的 1 分K，從頭重算 K 棒、部位與停損，所以中間漏跑幾次不會漏掉 K 棒，也不會漏掉停損；
 晚到的進出場會在卡片上標「上次更新之後」並寫晚了幾分鐘。每天 06:30 的存檔若漏跑，下一次更新發現缺盤會自動去期交所補抓。</p>
-<p class="note">「形成中」表示那根 K 還沒收完，條件是用現價先算，收K前都可能變。兩個版本的訊號都要等 60 分K 收完、下一根開盤才進場；兩版各自獨立計算，同一時間可能一邊持倉、一邊空手。
+<p class="note">「形成中」表示那根 K 還沒收完，條件是用現價先算，收K前都可能變。訊號要等 60 分K 收完、下一根開盤才進場。
 試算：本金 20 萬、1 口微台（每點 10 元）、每次下單 25 元；R 是以初始停損點數為 1 的倍數。</p>
 <p class="note"><b>資料：訊號、部位、停損都只用台指期近月（TX）日盤＋夜盤 60 分K</b>：期交所每筆成交轉 1 分K（history 到 {esc(d['history_last'])}）＋期交所即時 1 分K。
-加權指數只是歷史成交紀錄頁裡的回測資料，不用在這頁。規則：<code>strategy/v3.py</code> 的 V3；限時段用 <code>backtest.tx_revised</code>，不限時段版不套時段濾網。
+規則：<code>strategy/v3.py</code> 的 V3，開倉時段用 <code>backtest.tx_revised</code>。
 <a href="trades.html">歷史成交紀錄</a>・<a href="strategy.html">v3 前測（每日）</a></p>
 </footer>
 </main>
