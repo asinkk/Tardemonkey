@@ -33,7 +33,7 @@ jobs:
         run: |
           git config user.name "txo-bot"
           git config user.email "txo-bot@users.noreply.github.com"
-          git add docs/live.html docs/live.json docs/trades.html history/tx_1min
+          git add docs/live.html docs/live.json docs/trades.html docs/options.html history/option_trades.json history/tx_1min
           git diff --cached --quiet && exit 0
           git commit -m "策略訊號 $(TZ=Asia/Taipei date '+%F %H:%M')"
           for i in 1 2 3 4 5; do

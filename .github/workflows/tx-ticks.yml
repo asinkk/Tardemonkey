@@ -25,6 +25,10 @@ jobs:
           python-version: "3.12"
       - name: 下載期交所每筆成交並轉成 1 分K
         run: python strategy/collect_ticks.py history/tx_1min
+      - name: 下載期交所台指選擇權（含週選）每筆成交
+        # 選擇權失敗不擋期貨與策略頁，下次排程會再補（期交所留 30 個交易日）
+        continue-on-error: true
+        run: python strategy/collect_option_ticks.py history/txo_ticks
       - name: v3 前測（模擬交易紀錄與網頁）
         run: cd strategy && python forward.py ../history/tx_1min ../docs/strategy.html ../history/forward_trades.csv
       - name: v3（限時段）即時訊號頁與成交紀錄
@@ -33,9 +37,9 @@ jobs:
         run: |
           git config user.name "txo-bot"
           git config user.email "txo-bot@users.noreply.github.com"
-          git add history/tx_1min history/forward_trades.csv docs/strategy.html docs/live.html docs/live.json docs/trades.html
+          git add history/tx_1min history/txo_ticks history/forward_trades.csv docs/strategy.html docs/live.html docs/live.json docs/trades.html docs/options.html history/option_trades.json
           git diff --cached --quiet && exit 0
-          git commit -m "累積台指期 1 分K $(TZ=Asia/Taipei date '+%F')"
+          git commit -m "累積台指期 1 分K、台指選擇權逐筆 $(TZ=Asia/Taipei date '+%F')"
           for i in 1 2 3 4 5; do
             if git pull --rebase origin main && git push; then exit 0; fi
             git rebase --abort 2>/dev/null || true

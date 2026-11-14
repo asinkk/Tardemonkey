@@ -11,6 +11,7 @@
 | `strategy/backtest.py` | 指標、開倉時段（`tx_revised`）、手續費等共用函式 |
 | `strategy/build_bars.py` | 1 分K 合成近月連續 60 分K（日盤 08:45 起、夜盤 15:00 起，換月回溯調整） |
 | `strategy/collect_ticks.py` | 下載期交所前 30 個交易日每筆成交，轉成 1 分K 存到 `history/tx_1min/` |
+| `strategy/collect_option_ticks.py` | 下載期交所前 30 個交易日選擇權每筆成交，只留台指選擇權 TXO（月選＋週三/週五週選，含夜盤），xz 壓縮存到 `history/txo_ticks/`（一天約 0.5–1.4 MB） |
 | `strategy/live.py` | 即時訊號頁：history＋期交所即時 1 分K，算 v3 限時段目前的部位、停損與進場條件，輸出 `docs/live.html`、`docs/live.json`、`docs/trades.html` |
 | `strategy/trades_page.py` | 歷史成交紀錄頁 `docs/trades.html`，只列 2026-09-21 起有完整日夜盤資料的成交（由 `live.py` 產生） |
 | `strategy/forward.py` | v3 前測（2026/11/9 起算），輸出 `docs/strategy.html`、`history/forward_trades.csv` |
@@ -24,5 +25,5 @@ python strategy/live.py --out /tmp/x --offline  # 只用 history
 
 排程（GitHub Actions，時間可能晚 5–30 分鐘或漏跑）：
 - `strategy-live.yml`：交易時段每半小時更新即時訊號頁（日盤台北 :18/:48，夜盤 :04/:34）。
-- `tx-ticks.yml`：每天台北 06:30 存期交所 1 分K（期交所只留 30 個交易日）、跑前測與即時訊號頁。
+- `tx-ticks.yml`：每天台北 06:30 存期交所 1 分K 與台指選擇權逐筆（期交所只留 30 個交易日）、跑前測與即時訊號頁。
 - `clock.yml`（排程鬧鐘）：GitHub 的 schedule 常延誤，鬧鐘在長時間 job 裡照上面兩個 workflow 的 cron 準時觸發它們。
