@@ -17,6 +17,8 @@ from build_bars import build
 from backtest import indicators, tx_revised, us_dst, COST
 import v3
 import trades_page
+import option_signal
+import options_page
 import collect_ticks
 
 MIS = "https://mis.taifex.com.tw/futures/api/"
@@ -391,6 +393,18 @@ def main():
     tx = [trade_row(x, last_c) for x in res["v3"]["trades"] if x["entry_t"] >= TRADES_START]
     open(os.path.join(a.out, "trades.html"), "w", encoding="utf-8").write(
         trades_page.render(tx, now, last_c, f"{max(T[0], TRADES_START):%Y-%m-%d}", (CAP, MULT, FEE, COST)))
+    # 週選即時訊號頁：v3 每筆進場（加上剛收完 K、下一根才進場的訊號）對應要買的週選與分批停利
+    try:
+        r = res["v3"]
+        sigs = [{"entry_t": x["entry_t"], "side": x["side"], "kind": x["kind"]} for x in r["trades"]]
+        if r["sig"] and not v3_forming and all(x["entry_t"] != r["sig"]["entry_t"] for x in sigs):
+            sigs.append({"entry_t": r["sig"]["entry_t"], "side": r["sig"]["side"], "kind": r["sig"]["kind"]})
+        od = option_signal.update(sigs, now, os.path.join(here, ".."), None if a.offline else post)
+        od["v3"] = {"pos": ("多" if r["pos"]["side"] > 0 else "空") if r["pos"] else ""}
+        od["forward_start"] = f"{option_signal.FORWARD_START:%Y-%m-%d}"
+        open(os.path.join(a.out, "options.html"), "w", encoding="utf-8").write(options_page.render(od, now))
+    except Exception as e:   # 週選頁出錯不擋期貨訊號頁
+        print("週選即時訊號頁更新失敗：", repr(e))
     print(f"現價 {last_c:,.0f}；history 到 {hist_last}，補上即時 {added} 分鐘；" + "；".join(
         f"{NAMES[k]} {'持倉' if res[k]['pos'] else '空手'}{'、訊號' if res[k]['sig'] else ''}" for k, _ in STRATS))
 
@@ -557,6 +571,7 @@ footer {{ margin:20px 0 40px; }}
 <div class="top"><div><h1>台指策略即時訊號</h1>
 <p class="asof">{esc(sess)}・網頁產生於台北 {esc(d['generated'])}（<span id="age">—</span>）</p></div>
 <div style="text-align:right"><p class="price">{d['last_price']:,.0f}</p><p class="asof">台指期近月（日盤＋夜盤）・資料到 {esc(src)}</p></div></div>
+<p class="sub"><a href="options.html">週選即時訊號（訊號出現時買哪一檔、怎麼分批停利）→</a></p>
 <p class="alert" id="stale" hidden></p>
 {gap}{errs}
 <div class="cols">
@@ -574,7 +589,7 @@ footer {{ margin:20px 0 40px; }}
 試算：本金 20 萬、1 口微台（每點 10 元）、每次下單 25 元；R 是以初始停損點數為 1 的倍數。</p>
 <p class="note"><b>資料：訊號、部位、停損都只用台指期近月（TX）日盤＋夜盤 60 分K</b>：期交所每筆成交轉 1 分K（history 到 {esc(d['history_last'])}）＋期交所即時 1 分K。
 規則：<code>strategy/v3.py</code> 的 V3，開倉時段用 <code>backtest.tx_revised</code>。
-<a href="trades.html">歷史成交紀錄</a>・<a href="strategy.html">v3 前測（每日）</a></p>
+<a href="trades.html">歷史成交紀錄</a>・<a href="options.html">週選即時訊號</a>・<a href="strategy.html">v3 前測（每日）</a></p>
 </footer>
 </main>
 <script>

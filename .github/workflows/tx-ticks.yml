@@ -37,7 +37,7 @@ jobs:
         run: |
           git config user.name "txo-bot"
           git config user.email "txo-bot@users.noreply.github.com"
-          git add history/tx_1min history/txo_ticks history/forward_trades.csv docs/strategy.html docs/live.html docs/live.json docs/trades.html
+          git add history/tx_1min history/txo_ticks history/forward_trades.csv docs/strategy.html docs/live.html docs/live.json docs/trades.html docs/options.html history/option_trades.json
           git diff --cached --quiet && exit 0
           git commit -m "累積台指期 1 分K、台指選擇權逐筆 $(TZ=Asia/Taipei date '+%F')"
           for i in 1 2 3 4 5; do
