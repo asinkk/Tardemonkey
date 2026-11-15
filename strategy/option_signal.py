@@ -4,7 +4,7 @@
   - 多單買買權（C）、空單買賣權（P）；到期日最近的一檔，距到期不到 22.6 小時（＝訊號所屬交易日當天到期）就改買下一個到期。
   - 履約價取當時價格最接近 30 點的那一檔。
   - 出場分四批：3 倍、5 倍、10 倍限價停利，以及「漲過 5 倍後，從最高價回落 30%」出場；沒成交的放到結算。不設停損。
-    口數怎麼分在網頁上算（30%／30%／20%／20%），這裡只記每一批每口的結果。
+    這是預設方案；網頁上可以換其他停利方案或自訂倍數，口數怎麼分、各方案的損益都在網頁上用價格軌跡（env）重算。
 
 資料：
   - history/txo_ticks/：期交所選擇權逐筆成交（每天 06:30 存前一個交易日的夜盤＋日盤）。有逐筆的部分一律以逐筆為準。
@@ -32,7 +32,7 @@ def tick_size(p):
 
 def round_tick(p):
     t = tick_size(p)
-    return round(round(p / t) * t, 1)
+    return round(int(p / t + 0.5 + 1e-9) * t, 1)      # 四捨五入到最近一檔（和網頁的算法一致）
 
 
 def stamp(t):
@@ -232,17 +232,31 @@ class Mis:
 
 
 # ---------- 模擬 ----------
+ENV_FROM = 1.5                     # 軌跡只記漲到買進價 1.5 倍以上的部分（網頁可選的停利倍數下限）
+VERSION = 2                        # 紀錄格式版本；舊版紀錄（沒有 env）會從逐筆重算一次
+
+
 def simulate(entry, seq):
-    """seq：進場後依時間排序的 (時間, 價)。回傳各批每口的結果。"""
+    """seq：進場後依時間排序的 (時間, 價)。回傳預設方案各批每口的結果，以及給網頁重算任意停利方案用的價格軌跡 env。
+    env：[[創新高時間, 新高價, [[時間, 價], ...]], ...]——每次創新高（≥ 買進價 1.5 倍）記一筆，
+    後面跟著「下一次創新高之前」陸續出現的新低。任何倍數的限價停利（第一個 ≥ 目標價的新高）
+    與任何「漲過 a 倍後回落 b%」（啟動後第一個 ≤ 新高×(1−b) 的新低）都能從這裡準確重算。"""
     tg = {m: round_tick(entry * m) for m in MULTS}
     arm = round_tick(entry * TRAIL_ARM)
     fills, trail, peak, peak_t, last, last_t = {}, None, entry, None, entry, None
+    env, low = [], None
     for t, p in seq:
         for m in MULTS:
             if m not in fills and p >= tg[m]:
                 fills[m] = t
         if p > peak:
             peak, peak_t = p, t
+            if p >= entry * ENV_FROM:
+                env.append([t.strftime(F), p, []])
+                low = p
+        elif env and p < low:
+            low = p
+            env[-1][2].append([t.strftime(F), p])
         if trail is None and peak >= arm and p <= peak * (1 - TRAIL_BACK):
             trail = (t, p)
         last, last_t = p, t
@@ -250,7 +264,7 @@ def simulate(entry, seq):
             "fills": {str(m): fills[m].strftime(F) for m in fills},
             "trail": {"t": trail[0].strftime(F), "px": trail[1]} if trail else None,
             "peak": peak, "peak_t": peak_t.strftime(F) if peak_t else "",
-            "last": last, "last_t": last_t.strftime(F) if last_t else ""}
+            "last": last, "last_t": last_t.strftime(F) if last_t else "", "env": env, "v": VERSION}
 
 
 def refresh(rec, ticks, mis, now):
@@ -339,15 +353,17 @@ def update(signals, now, root, post=None):
                          "lag": max(0, round((p["entry_at"] - t).total_seconds() / 60)),
                          "phase": "前測" if t >= FORWARD_START else "回測"}
     for rec in recs.values():
-        if not rec.get("final"):
+        if not rec.get("final") or rec.get("v") != VERSION:
             try:
                 refresh(rec, ticks, mis, now)
             except Exception as e:
                 rec["warn"] = f"更新失敗：{e}"
     state = {"trades": [recs[k] for k in sorted(recs)]}
     os.makedirs(os.path.dirname(path), exist_ok=True)
-    json.dump(state, open(path, "w", encoding="utf-8"), ensure_ascii=False, indent=1)
+    with open(path, "w", encoding="utf-8") as f:      # 一筆交易一行（軌跡很長，不縮排）
+        f.write('{"trades": [\n' + ",\n".join(json.dumps(r, ensure_ascii=False, separators=(",", ":")) for r in state["trades"]) + "\n]}\n")
     cover = ticks.covered_to()
     return {"generated": f"{now:%Y-%m-%d %H:%M}", "ticks_to": f"{cover:%Y-%m-%d %H:%M}" if cover else "", "notes": notes,
-            "rules": {"target": TARGET, "mults": MULTS, "arm": TRAIL_ARM, "back": TRAIL_BACK, "cost": COST, "point": POINT},
+            "rules": {"target": TARGET, "mults": MULTS, "arm": TRAIL_ARM, "back": TRAIL_BACK, "cost": COST, "point": POINT,
+                      "env_from": ENV_FROM},
             "trades": [{k: v for k, v in r.items() if k != "bars"} for r in state["trades"]]}
