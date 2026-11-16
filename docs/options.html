@@ -182,11 +182,8 @@ function legs(x, n, S) {
     l.sub = l.per * l.lots;
     if (l.done || x.closed) real += l.sub; else unreal += l.sub;
   }
-  // 這個方案下有分到口數的每一批都已成交＝已全部出場（不用等到期）
-  const done = out.every((l) => !l.lots || l.done);
-  return {legs: out, real, unreal, total: real + unreal, cost: x.entry * n, done};
+  return {legs: out, real, unreal, total: real + unreal, cost: x.entry * n};
 }
-const ended = (x, n, S) => x.closed || legs(x, n, S).done;
 const isFresh = (x) => (time(D.generated) - time(x.id)) / 6e4 <= 60 && x.peak < x.entry * R.env_from;
 
 function cname(x) {
@@ -231,15 +228,15 @@ function history(n, S) {
   if (!T.length) return '<p class="note">還沒有交易。</p>';
   let tot = 0, cost = 0, win = 0, closed = 0, fwd = 0;
   const body = [...T].reverse().map((x) => {
-    const g = legs(x, n, S), end = x.closed || g.done;
+    const g = legs(x, n, S);
     tot += g.total; cost += g.cost;
-    if (end) { closed++; if (g.total > 0) win++; }
+    if (x.closed) { closed++; if (g.total > 0) win++; }
     if (x.phase === '前測') fwd += g.total;
     const cells = g.legs.map((l) => `<td>${!l.lots ? '<span class="wait">0 口</span>' : l.done ? `<span class="ok">✓</span> ${num(l.exit)}・${md(l.when)}` : '<span class="wait">—</span>'}</td>`).join('');
-    return `<tr class="${x.side > 0 ? 'long' : 'short'}${end ? '' : ' open'}">
+    return `<tr class="${x.side > 0 ? 'long' : 'short'}${x.closed ? '' : ' open'}">
       <td><span class="ph${x.phase === '前測' ? ' fw' : ''}">${esc(x.phase)}</span></td><td>${esc(x.id)}</td><td>${x.side > 0 ? '多' : '空'}・${esc(x.kind)}</td>
       <td>${cname(x)}</td><td>${num(x.entry)}</td><td>${num(x.peak)}（${num(x.peak / x.entry, 1)} 倍）</td>${cells}
-      <td>${x.closed ? num(x.last) : g.done ? '已全部停利' : '持倉中 ' + num(x.last)}</td><td>${money(g.total, 1)}</td><td>${money(g.total * R.point)}</td></tr>`;
+      <td>${x.closed ? num(x.last) : '持倉中 ' + num(x.last)}</td><td>${money(g.total, 1)}</td><td>${money(g.total * R.point)}</td></tr>`;
   }).join('');
   const heads = legs(T[0], n, S).legs.map((l) => `<th>${l.name}</th>`).join('');
   return `<div class="tiles">
@@ -278,14 +275,14 @@ function draw() {
     o.textContent = `${s.name}　${sgn(total(n, s) * R.point)} 元`;
   }
   $('#schemenote').textContent = allocText(n, S) + '。選單上的金額是下面歷史紀錄在這個口數下的合計損益。';
-  const open = D.trades.filter((x) => !ended(x, n, S)).reverse();
+  const open = D.trades.filter((x) => !x.closed).reverse();
   const fresh = open.find(isFresh);
   const v = D.v3;
   let b;
   if (fresh) b = `<div class="card banner buy">新訊號：買進 ${n} 口 ${cname(fresh)}，約 ${num(fresh.entry)} 點
       <small>訊號 ${esc(fresh.id)}・買進後照下面的表掛停利單・${allocText(n, S)}</small></div>`;
   else if (open.length) b = `<div class="card banner">持倉中：${open.map(cname).join('、')}<small>照下面的表等停利成交，不設停損・${allocText(n, S)}</small></div>`;
-  else b = `<div class="card banner">等待訊號<small>${v.pos ? `v3 目前持有${esc(v.pos)}單，但對應的週選已到期或已全部停利；` : ''}v3 出現新的進場訊號時，這裡會顯示要買哪一檔・${allocText(n, S)}</small></div>`;
+  else b = `<div class="card banner">等待訊號<small>${v.pos ? `v3 目前持有${esc(v.pos)}單，但對應的週選已到期或已結束；` : ''}v3 出現新的進場訊號時，這裡會顯示要買哪一檔・${allocText(n, S)}</small></div>`;
   $('#banner').innerHTML = b + D.notes.map((s) => `<p class="alert">⚠ ${esc(s)}</p>`).join('');
   $('#open').innerHTML = open.map((x) => card(x, n, S)).join('');
   $('#hist').innerHTML = history(n, S);
