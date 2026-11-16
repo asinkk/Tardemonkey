@@ -1,7 +1,7 @@
 """v3 前測：用 history/tx_1min 累積的台指期日夜盤 60 分K 跑 v3，輸出模擬交易紀錄與網頁。
 FORWARD_START 之後的訊號才算前測（策略規則在這之前就定好，沒有偷看）。
 試算條件：本金 20 萬、固定 1 口微台（每點 10 元）、每次下單 25 元。
-資料每天台北 06:30 更新到前一晚夜盤，所以網頁是事後紀錄，不是即時訊號。
+資料每天台北 06:32 更新到前一晚夜盤，所以網頁是事後紀錄，不是即時訊號。
 用法：python strategy/forward.py [1分K資料夾] [輸出 html] [輸出 csv]
 """
 import csv, datetime as dt, html, os, sys
@@ -103,7 +103,7 @@ th {{ color:var(--muted); font-weight:500; }} th:nth-child(-n+3), td:nth-child(-
 a {{ color:inherit; }}
 </style></head><body><main>
 <h1>台指 60 分K 策略 v3 前測</h1>
-<p class="asof">資料到 {last_t:%Y-%m-%d %H:%M} 那根 K（收盤 {last_c:,.0f}）。每天台北 06:30 更新，所以這是事後模擬紀錄，不是即時訊號。</p>
+<p class="asof">資料到 {last_t:%Y-%m-%d %H:%M} 那根 K（收盤 {last_c:,.0f}）。每天台北 06:32 更新，所以這是事後模擬紀錄，不是即時訊號。</p>
 <div class="card"><h3 style="margin:0 0 4px;font-size:12px;color:var(--muted);font-weight:500">目前部位（模擬）</h3>{pos}</div>
 <h2>前測：{FORWARD_START:%Y/%m/%d} 起</h2>
 <p class="note">規則在這天之前就定好，之後的結果才算真正的樣本外驗證。試算：本金 20 萬、1 口微台、每次下單 25 元。</p>
