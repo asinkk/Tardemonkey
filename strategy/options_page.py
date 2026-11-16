@@ -98,7 +98,7 @@ function customScheme() {
   return {name: '自訂', legs: legs.length ? legs : [{m: 5, w: 1}]};
 }
 const scheme = (key) => key === 'custom' ? customScheme() : PRESETS[key] || PRESETS.balanced;
-// 權利金：每筆訊號都追蹤了幾種權利金（約 10、20、30、50、100 點）各自選到的那一檔，這裡挑要看哪一種
+// 權利金：每筆訊號都追蹤了幾種權利金（約 30、60、100 點）各自選到的那一檔，這裡挑要看哪一種
 const tradesOf = (t) => D.trades.filter((x) => (x.target || R.target) === t);
 let TT = tradesOf(R.target);
 
@@ -304,7 +304,7 @@ def render(d, now):
 </div>
 <p class="note" id="schemenote"></p>
 <p class="note">「權利金」決定買哪一檔：選權利金最接近這個點數的履約價（預設 {r["target"]} 點）。停利方案只影響試算和掛單建議，買哪一檔不變。高倍數方案的回測金額只靠少數幾筆大行情：30 點「全部 10 倍」9 筆裡有 4 筆全賠。</p>
-<p class="note">規則是用 30 點回測定案的，其他權利金是同樣訊號、同樣出場方式套到不同價位的檔，給你比較用。很便宜的檔（約 10 點）有時最近的只剩幾點，選單金額要搭配下面每一筆的買進價看。</p></section>
+<p class="note">規則是用 30 點回測定案的，其他權利金是同樣訊號、同樣出場方式套到不同價位的檔，給你比較用。權利金越高投入越多，比較時看報酬率。</p></section>
 <nav style="margin-bottom:0"><a href="live.html">← 即時訊號（期貨）</a><a href="trades.html">期貨成交紀錄</a></nav>
 <div id="banner"></div>
 <div id="open"></div>
