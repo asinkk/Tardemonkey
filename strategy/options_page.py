@@ -98,6 +98,9 @@ function customScheme() {
   return {name: '自訂', legs: legs.length ? legs : [{m: 5, w: 1}]};
 }
 const scheme = (key) => key === 'custom' ? customScheme() : PRESETS[key] || PRESETS.balanced;
+// 權利金：每筆訊號都追蹤了幾種權利金（約 10、20、30、50、100 點）各自選到的那一檔，這裡挑要看哪一種
+const tradesOf = (t) => D.trades.filter((x) => (x.target || R.target) === t);
+let TT = tradesOf(R.target);
 
 // 口數照比例分，零頭依 legs 的順序補；只有 1 口時用方案指定的那一批（均衡、積極是 5 倍）
 function alloc(S, n) {
@@ -167,7 +170,7 @@ function card(x, n, S) {
     <td>${l.lots ? money(l.per, 1) : ''}</td><td>${l.lots ? money(l.sub * R.point) : ''}</td></tr>`).join('');
   return `<section class="card">
   <div class="ch"><div><h2>${fresh ? '買哪一檔' : '持倉追蹤'}</h2>
-    <p class="note">v3 ${side ? '多' : '空'}單・${esc(x.kind)}・訊號 ${esc(x.id)}・${esc(x.phase)}</p></div>
+    <p class="note">v3 ${side ? '多' : '空'}單・${esc(x.kind)}・訊號 ${esc(x.id)}・${esc(x.phase)}・權利金約 ${x.target || R.target} 點的檔</p></div>
     <span class="state ${side ? 'long' : 'short'}">${side ? '買買權 CALL' : '買賣權 PUT'}</span></div>
   <p class="contract">${cname(x)}</p>
   <p class="note">到期 ${esc(x.exp_t.slice(0, 16))}${hrs > 0 ? `（還有 ${hrs >= 48 ? num(hrs / 24, 1) + ' 天' : num(hrs, 1) + ' 小時'}）` : '（已到期）'}
@@ -190,7 +193,7 @@ function card(x, n, S) {
 }
 
 function history(n, S) {
-  const T = D.trades;
+  const T = TT;
   if (!T.length) return '<p class="note">還沒有交易。</p>';
   let tot = 0, cost = 0, win = 0, closed = 0, fwd = 0;
   const body = [...T].reverse().map((x) => {
@@ -214,7 +217,7 @@ function history(n, S) {
     ${heads}<th>結算／現價</th><th>損益（點）</th><th>損益（元）</th></tr></thead>
   <tbody>${body}</tbody></table></div>`;
 }
-const total = (n, S) => D.trades.reduce((a, x) => a + legs(x, n, S).total, 0);
+const total = (n, S, T = TT) => T.reduce((a, x) => a + legs(x, n, S).total, 0);
 
 function allocText(n, S) {
   const a = alloc(S, n);
@@ -230,8 +233,13 @@ function draw() {
   let n = Math.round(Number($('#lots').value));
   if (!(n >= 1)) n = 1;
   if (n > 99) n = 99;
-  const key = $('#scheme').value, S = scheme(key);
-  store('lots', n); store('scheme', key);
+  const key = $('#scheme').value, S = scheme(key), tg = Number($('#target').value) || R.target;
+  TT = tradesOf(tg);
+  store('lots', n); store('scheme', key); store('target', tg);
+  for (const o of $('#target').options) {
+    const T = tradesOf(Number(o.value)), tot = total(n, S, T), cost = T.reduce((a, x) => a + x.entry * n, 0);
+    o.textContent = `約 ${o.value} 點　${sgn(tot * R.point)} 元（報酬 ${cost ? sgn(tot / cost * 100) : 0}%）`;
+  }
   store('custom', JSON.stringify(Object.fromEntries(CUSTOM_IDS.map((i) => [i, $('#' + i).value]).concat([['ctrail', $('#ctrail').checked]]))));
   $('#custom').hidden = key !== 'custom';
   for (const i of ['cm4']) $('#' + i).disabled = $('#ctrail').checked;
@@ -240,8 +248,8 @@ function draw() {
     const s = scheme(o.value);
     o.textContent = `${s.name}　${sgn(total(n, s) * R.point)} 元`;
   }
-  $('#schemenote').textContent = allocText(n, S) + '。選單上的金額是下面歷史紀錄在這個口數下的合計損益。';
-  const open = D.trades.filter((x) => !ended(x, n, S)).reverse();
+  $('#schemenote').textContent = allocText(n, S) + '。選單上的金額是下面歷史紀錄在這個口數、權利金、停利方案下的合計損益。';
+  const open = TT.filter((x) => !ended(x, n, S)).reverse();
   const fresh = open.find(isFresh);
   const v = D.v3;
   let b;
@@ -253,6 +261,9 @@ function draw() {
   $('#open').innerHTML = open.map((x) => card(x, n, S)).join('');
   $('#hist').innerHTML = history(n, S);
 }
+$('#target').innerHTML = R.targets.map((t) => `<option value="${t}"></option>`).join('');
+$('#target').value = R.target;
+if (R.targets.includes(Number(load('target')))) $('#target').value = load('target');
 $('#scheme').innerHTML = Object.keys(PRESETS).concat(['custom']).map((k) => `<option value="${k}"></option>`).join('');
 if (load('lots')) $('#lots').value = load('lots');
 try {
@@ -261,7 +272,7 @@ try {
   if (c.ctrail != null) $('#ctrail').checked = c.ctrail;
 } catch (e) {}
 if (load('scheme') && (PRESETS[load('scheme')] || load('scheme') === 'custom')) $('#scheme').value = load('scheme');
-for (const el of document.querySelectorAll('#lots, #scheme, #custom input')) el.addEventListener('input', draw);
+for (const el of document.querySelectorAll('#lots, #target, #scheme, #custom input')) el.addEventListener('input', draw);
 draw();
 """
 
@@ -277,7 +288,8 @@ def render(d, now):
 <div class="top"><div><h1>週選即時訊號</h1>
 <p class="asof">v3 60 分K（限時段）出訊號時買同方向週選・台北 {now:%Y-%m-%d %H:%M} 更新・逐筆成交資料到 {d["ticks_to"] or "（還沒有）"}</p></div>
 <div class="lots"><label for="lots">口數</label><input id="lots" type="number" min="1" max="99" step="1" value="10" inputmode="numeric"></div></div>
-<section class="card pick"><div class="row"><label for="scheme">停利方案</label><select id="scheme"></select></div>
+<section class="card pick"><div class="row"><label for="target">權利金</label><select id="target"></select>
+<label for="scheme">停利方案</label><select id="scheme"></select></div>
 <div id="custom" hidden>
 <p class="note">最多四批，各填停利倍數（{r["env_from"]:g}–30）和佔口數的百分比；比例不必剛好加到 100，會自動換算。比例填 0 表示不用這一批。</p>
 <div class="grid">
@@ -291,7 +303,8 @@ def render(d, now):
 <label>從最高價回落 <input id="cback" type="number" min="5" max="90" step="5" value="{r["back"] * 100:g}"> % 賣出</label></p>
 </div>
 <p class="note" id="schemenote"></p>
-<p class="note">方案只影響這一頁的試算和掛單建議，買哪一檔不變。高倍數方案的回測金額只靠少數幾筆大行情：「全部 10 倍」9 筆裡有 4 筆全賠。</p></section>
+<p class="note">「權利金」決定買哪一檔：選權利金最接近這個點數的履約價（預設 {r["target"]} 點）。停利方案只影響試算和掛單建議，買哪一檔不變。高倍數方案的回測金額只靠少數幾筆大行情：30 點「全部 10 倍」9 筆裡有 4 筆全賠。</p>
+<p class="note">規則是用 30 點回測定案的，其他權利金是同樣訊號、同樣出場方式套到不同價位的檔，給你比較用。很便宜的檔（約 10 點）有時最近的只剩幾點，選單金額要搭配下面每一筆的買進價看。</p></section>
 <nav style="margin-bottom:0"><a href="live.html">← 即時訊號（期貨）</a><a href="trades.html">期貨成交紀錄</a></nav>
 <div id="banner"></div>
 <div id="open"></div>
@@ -302,7 +315,7 @@ def render(d, now):
 <ul class="rules">
 <li>v3 出多單訊號買買權、空單訊號買賣權，在訊號 K 收完、下一根 60 分K 開盤時買進。</li>
 <li>買到期日最近的台指週選（週三、週五到期，第三個週三是月選）；當天就到期的話改買下一個到期的。</li>
-<li>履約價選當時權利金最接近 {r["target"]} 點的那一檔。</li>
+<li>履約價選當時權利金最接近 {r["target"]} 點的那一檔（預設；上方「權利金」可改看約 {"、".join(map(str, r["targets"]))} 點，每筆訊號都同時追蹤這幾檔）。</li>
 <li>分批停利（預設的均衡方案）：30% 口數掛 3 倍、30% 掛 5 倍、20% 掛 10 倍，剩下 20% 等漲過 {r["arm"]} 倍後，從最高價回落 {r["back"]:.0%} 賣出。沒成交的放到結算。上方可以換成其他方案或自訂倍數。</li>
 <li>不設停損：回測裡有好幾筆先跌到剩兩到五成才噴出，設停損會被洗掉。最大虧損就是付出的權利金。</li>
 </ul>
