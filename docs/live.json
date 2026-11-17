@@ -1,19 +1,19 @@
 {
- "generated": "2026-11-17 11:50",
- "prev_generated": "2026-11-17 11:37",
+ "generated": "2026-11-17 12:20",
+ "prev_generated": "2026-11-17 11:50",
  "gap": [],
- "last_price": 40749.0,
+ "last_price": 40277.0,
  "history_last": "2026-11-17 04:59",
- "live_minutes_added": 186,
+ "live_minutes_added": 216,
  "live": {
   "日盤": {
    "symbol": "TXFK6-F",
    "name": "臺指期116",
-   "last": 40749.0,
+   "last": 40277.0,
    "ref": 40781.0,
    "date": "20261117",
-   "last_minute": "2026-11-17 11:50",
-   "minutes": 186
+   "last_minute": "2026-11-17 12:20",
+   "minutes": 216
   },
   "夜盤": {
    "symbol": "TXFK6-M",
@@ -38,11 +38,11 @@
    "stop": 41893,
    "be": true,
    "R": 520,
-   "pts": 1147,
-   "twd": 11445,
-   "to_stop": 1144,
+   "pts": 1619,
+   "twd": 16165,
+   "to_stop": 1616,
    "be_at": 41376,
-   "trail_note": "保本後停損改成「進場後最低收盤 + 5 ATR」，只往有利方向移動；目前 ATR 500"
+   "trail_note": "保本後停損改成「進場後最低收盤 + 5 ATR」，只往有利方向移動；目前 ATR 543"
   },
   "sig": null,
   "checks": {
@@ -56,14 +56,14 @@
      {
       "name": "趨勢 EMA20 > EMA60",
       "ok": false,
-      "detail": "41,351 / 42,301"
+      "detail": "41,306 / 42,285"
      }
     ],
     "突破": [
      {
       "name": "紅K 實體 ≥ 高低差一半",
       "ok": false,
-      "detail": "實體 -67、高低差 222"
+      "detail": "實體 -539、高低差 829"
      },
      {
       "name": "實體 ≥ 0.8 ATR",
@@ -73,12 +73,12 @@
      {
       "name": "收盤站上布林上軌",
       "ok": false,
-      "detail": "上軌 41,566"
+      "detail": "上軌 41,657"
      },
      {
       "name": "MACD 柱翻正",
       "ok": true,
-      "detail": "+43.2"
+      "detail": "+13.1"
      }
     ],
     "拉回": [
@@ -90,7 +90,7 @@
      {
       "name": "低點碰到 EMA20",
       "ok": true,
-      "detail": "EMA20 41,351"
+      "detail": "EMA20 41,306"
      },
      {
       "name": "收盤站回 EMA20",
@@ -105,13 +105,13 @@
      {
       "name": "EMA60 比 5 根前高",
       "ok": false,
-      "detail": "-259"
+      "detail": "-275"
      }
     ],
     "stop": {
      "ok": true,
-     "stop": 40499.18476393658,
-     "raw": 80.96304721268098
+     "stop": 40005.50619250801,
+     "raw": 220.2987614984013
     }
    },
    "空": {
@@ -124,41 +124,41 @@
      {
       "name": "趨勢 EMA20 < EMA60",
       "ok": true,
-      "detail": "41,351 / 42,301"
+      "detail": "41,306 / 42,285"
      }
     ],
     "突破": [
      {
       "name": "黑K 實體 ≥ 高低差一半",
-      "ok": false,
-      "detail": "實體 -67、高低差 222"
+      "ok": true,
+      "detail": "實體 -539、高低差 829"
      },
      {
       "name": "實體 ≥ 0.8 ATR",
-      "ok": false,
+      "ok": true,
       "detail": "需 417 點"
      },
      {
       "name": "收盤跌破布林下軌",
-      "ok": false,
-      "detail": "下軌 40,687"
+      "ok": true,
+      "detail": "下軌 40,549"
      },
      {
       "name": "MACD 柱翻負",
       "ok": false,
-      "detail": "+43.2"
+      "detail": "+13.1"
      }
     ],
     "拉回": [
      {
       "name": "黑K 實體 ≥ 高低差一半",
-      "ok": false,
+      "ok": true,
       "detail": ""
      },
      {
       "name": "高點碰到 EMA20",
       "ok": false,
-      "detail": "EMA20 41,351"
+      "detail": "EMA20 41,306"
      },
      {
       "name": "收盤壓回 EMA20",
@@ -167,19 +167,19 @@
      },
      {
       "name": "收盤破前一根低點",
-      "ok": false,
+      "ok": true,
       "detail": "40,551"
      },
      {
       "name": "EMA60 比 5 根前低",
       "ok": true,
-      "detail": "-259"
+      "detail": "-275"
      }
     ],
     "stop": {
      "ok": true,
-     "stop": 40998.81523606342,
-     "raw": 240.96304721268098
+     "stop": 40994.2987614984,
+     "raw": 717.2987614984013
     }
    }
   },
@@ -231,9 +231,9 @@
      "stop": 41893,
      "exit_t": "",
      "exit": "",
-     "r": 2.2,
-     "pts": 1147,
-     "twd": 11445,
+     "r": 3.11,
+     "pts": 1619,
+     "twd": 16165,
      "open": true,
      "be": true,
      "why": "",
@@ -372,7 +372,7 @@
     "n": 2,
     "win": 0,
     "R": -1.0,
-    "twd": 5059
+    "twd": 9779
    },
    "bsum": {
     "n": 7,
@@ -383,11 +383,11 @@
   },
   "events": [],
   "levels": {
-   "E20": 41351,
-   "E60": 42301,
-   "ATR": 500,
-   "BBU": 41566,
-   "BBL": 40687
+   "E20": 41306,
+   "E60": 42285,
+   "ATR": 543,
+   "BBU": 41657,
+   "BBL": 40549
   }
  }
 }
