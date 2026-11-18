@@ -30,6 +30,8 @@ nav a { font-size:13px; border:1px solid var(--line); border-radius:999px; paddi
 .pick .grid { display:grid; grid-template-columns:auto auto auto; gap:6px 12px; justify-content:start; align-items:center; margin:8px 0; font-size:13px; }
 .pick .trail { font-size:13px; margin:6px 0; display:flex; gap:6px; flex-wrap:wrap; align-items:center; }
 .pick input:disabled { opacity:.45; }
+.pick input[type=date] { font:inherit; font-size:15px; padding:3px 6px; border:1px solid var(--line); border-radius:6px; background:var(--bg); color:var(--fg); }
+.pick button { font:inherit; font-size:13px; padding:3px 10px; border:1px solid var(--line); border-radius:999px; background:var(--panel); color:var(--fg); cursor:pointer; }
 .card { background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:14px; margin-top:12px; }
 .banner { font-size:17px; font-weight:600; }
 .banner.buy { background:var(--sigbg); border-color:var(--accent); }
@@ -99,7 +101,11 @@ function customScheme() {
 }
 const scheme = (key) => key === 'custom' ? customScheme() : PRESETS[key] || PRESETS.balanced;
 // 權利金：每筆訊號都追蹤了幾種權利金（約 30、60、100 點）各自選到的那一檔，這裡挑要看哪一種
-const tradesOf = (t) => D.trades.filter((x) => (x.target || R.target) === t);
+// 損益起始日期：只統計訊號時間在這天（含）之後的交易；預設當月 1 號。持倉中的卡片不受影響
+const allOf = (t) => D.trades.filter((x) => (x.target || R.target) === t);
+const MONTH1 = D.generated.slice(0, 7) + '-01';
+const startDay = () => $('#start').value || '';
+const tradesOf = (t) => allOf(t).filter((x) => x.id.slice(0, 10) >= startDay());
 let TT = tradesOf(R.target);
 
 // 口數照比例分，零頭依 legs 的順序補；只有 1 口時用方案指定的那一批（均衡、積極是 5 倍）
@@ -194,7 +200,7 @@ function card(x, n, S) {
 
 function history(n, S) {
   const T = TT;
-  if (!T.length) return '<p class="note">還沒有交易。</p>';
+  if (!T.length) return `<p class="note">${startDay() ? esc(startDay()) + ' 起' : ''}還沒有交易。</p>`;
   let tot = 0, cost = 0, win = 0, closed = 0, fwd = 0;
   const body = [...T].reverse().map((x) => {
     const g = legs(x, n, S), end = x.closed || g.done;
@@ -209,7 +215,7 @@ function history(n, S) {
   }).join('');
   const heads = legs(T[0], n, S).legs.map((l) => `<th>${l.name}</th>`).join('');
   return `<div class="tiles">
-    <div><span>合計損益（${n} 口・${esc(S.name)}）</span><b>${money(tot * R.point)}</b><em>元（${sgn(tot, 1)} 點）</em></div>
+    <div><span>合計損益（${startDay() ? esc(startDay()) + ' 起・' : ''}${n} 口・${esc(S.name)}）</span><b>${money(tot * R.point)}</b><em>元（${sgn(tot, 1)} 點）</em></div>
     <div><span>投入權利金合計</span><b>${num(cost * R.point, 0)}</b><em>元・報酬 ${cost ? sgn(tot / cost * 100) : 0}%</em></div>
     <div><span>已結束</span><b>${closed} 筆</b><em>賺 ${win} 筆</em></div>
     <div><span>其中前測</span><b>${money(fwd * R.point)}</b><em>元（${esc(D.forward_start)} 起的訊號）</em></div></div>
@@ -235,6 +241,8 @@ function draw() {
   if (n > 99) n = 99;
   const key = $('#scheme').value, S = scheme(key), tg = Number($('#target').value) || R.target;
   TT = tradesOf(tg);
+  const sd = startDay();
+  $('#startnote').textContent = (sd ? `${sd} 起` : '全部期間') + `共 ${TT.length} 筆訊號`;
   store('lots', n); store('scheme', key); store('target', tg);
   for (const o of $('#target').options) {
     const T = tradesOf(Number(o.value)), tot = total(n, S, T), cost = T.reduce((a, x) => a + x.entry * n, 0);
@@ -248,8 +256,8 @@ function draw() {
     const s = scheme(o.value);
     o.textContent = `${s.name}　${sgn(total(n, s) * R.point)} 元`;
   }
-  $('#schemenote').textContent = allocText(n, S) + '。選單上的金額是下面歷史紀錄在這個口數、權利金、停利方案下的合計損益。';
-  const open = TT.filter((x) => !ended(x, n, S)).reverse();
+  $('#schemenote').textContent = allocText(n, S) + '。選單上的金額是下面歷史紀錄（起始日期之後）在這個口數、權利金、停利方案下的合計損益。';
+  const open = allOf(tg).filter((x) => !ended(x, n, S)).reverse();
   const fresh = open.find(isFresh);
   const v = D.v3;
   let b;
@@ -261,6 +269,11 @@ function draw() {
   $('#open').innerHTML = open.map((x) => card(x, n, S)).join('');
   $('#hist').innerHTML = history(n, S);
 }
+const FIRST = D.trades.length ? D.trades[0].id.slice(0, 10) : MONTH1;
+$('#start').value = MONTH1;
+$('#start').max = D.generated.slice(0, 10);
+$('#month').onclick = () => { $('#start').value = MONTH1; draw(); };
+$('#all').onclick = () => { $('#start').value = FIRST; draw(); };
 $('#target').innerHTML = R.targets.map((t) => `<option value="${t}"></option>`).join('');
 $('#target').value = R.target;
 if (R.targets.includes(Number(load('target')))) $('#target').value = load('target');
@@ -272,7 +285,7 @@ try {
   if (c.ctrail != null) $('#ctrail').checked = c.ctrail;
 } catch (e) {}
 if (load('scheme') && (PRESETS[load('scheme')] || load('scheme') === 'custom')) $('#scheme').value = load('scheme');
-for (const el of document.querySelectorAll('#lots, #target, #scheme, #custom input')) el.addEventListener('input', draw);
+for (const el of document.querySelectorAll('#lots, #target, #scheme, #start, #custom input')) el.addEventListener('input', draw);
 draw();
 """
 
@@ -290,6 +303,8 @@ def render(d, now):
 <div class="lots"><label for="lots">口數</label><input id="lots" type="number" min="1" max="99" step="1" value="10" inputmode="numeric"></div></div>
 <section class="card pick"><div class="row"><label for="target">權利金</label><select id="target"></select>
 <label for="scheme">停利方案</label><select id="scheme"></select></div>
+<div class="row" style="margin-top:8px"><label for="start">損益起始日期</label><input id="start" type="date">
+<button type="button" id="month">當月</button><button type="button" id="all">全部</button><span class="note" id="startnote"></span></div>
 <div id="custom" hidden>
 <p class="note">最多四批，各填停利倍數（{r["env_from"]:g}–30）和佔口數的百分比；比例不必剛好加到 100，會自動換算。比例填 0 表示不用這一批。</p>
 <div class="grid">
