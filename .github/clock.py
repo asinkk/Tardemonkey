@@ -3,8 +3,9 @@
 
 - 時間表直接讀那兩個 workflow 的 cron（UTC），不用另外維護一份。
 - 一次最多跑約 5 小時 45 分（job 上限 6 小時），到時候觸發下一棒自己再結束。
-- 下一個排程時間在 150 分鐘以後（週六 06:32 之後到週一開盤）才結束，由 clock.yml 自己的排程再叫起來。
-  平日 06:32 → 08:50 的 140 分鐘空檔不結束，因為 GitHub 的 08:40 排程常晚到（11/10 晚 18 分、11/11 晚 77 分）。
+- 週末也不結束，一路交棒到週一開盤。以前週六 06:32 之後就結束、等 clock.yml 週一的排程叫醒，
+  但 GitHub 的排程常晚好幾個小時（平日 06:32 的備援常拖到 11:40 才來），11/16、11/23 週一早上都沒叫醒，
+  要手動跑才恢復。公開 repo 的 Actions 分鐘數免費，週末空等不花錢。
 - 同時只留一個鬧鐘：開始時若有更早的鬧鐘還在跑，等兩分鐘（交棒用），還在就結束。
 
 測試：python .github/clock.py --dry-run --now 2026-11-09T00:40 --minutes 120
@@ -14,7 +15,6 @@ import argparse, datetime as dt, glob, json, os, re, subprocess, sys, time
 HERE = os.path.dirname(os.path.abspath(__file__))
 TARGETS = ["strategy-live.yml", "tx-ticks.yml"]
 MAX_RUN = dt.timedelta(hours=5, minutes=45)
-IDLE_GAP = dt.timedelta(minutes=150)
 UTC = dt.timezone.utc
 TPE = dt.timezone(dt.timedelta(hours=8))
 
@@ -54,16 +54,6 @@ def due(crons, t):
     """UTC 時間 t（到分鐘）要觸發的 workflow。"""
     dow = (t.weekday() + 1) % 7  # cron：0=星期日
     return sorted({n for n, ms, hs, ds in crons if t.minute in ms and t.hour in hs and dow in ds})
-
-
-def next_slot(crons, t, limit=dt.timedelta(hours=24)):
-    s = t.replace(second=0, microsecond=0) + dt.timedelta(minutes=1)
-    end = t + limit
-    while s <= end:
-        if due(crons, s):
-            return s
-        s += dt.timedelta(minutes=1)
-    return None
 
 
 def gh(*args, dry):
@@ -128,10 +118,6 @@ def main():
                 late = (now() - last).total_seconds() / 60
                 print(f"台北 {tpe(last)} 觸發 {name}" + (f"（晚 {late:.0f} 分）" if late >= 2 else ""))
                 gh("workflow", "run", name, "--ref", ref, dry=a.dry_run)
-        nxt = next_slot(crons, t)
-        if nxt is None or nxt - t > IDLE_GAP:
-            print(f"下一次是台北 {tpe(nxt) if nxt else '24 小時後'}，先結束，等 clock.yml 排程再叫醒")
-            return
         if now() - start >= MAX_RUN:
             print("快到 6 小時上限，交棒給下一個鬧鐘")
             gh("workflow", "run", "clock.yml", "--ref", ref, dry=a.dry_run)
