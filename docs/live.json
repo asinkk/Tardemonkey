@@ -1,10 +1,10 @@
 {
- "generated": "2026-11-23 22:36",
- "prev_generated": "2026-11-23 22:06",
+ "generated": "2026-11-23 23:06",
+ "prev_generated": "2026-11-23 22:36",
  "gap": [],
- "last_price": 39942.0,
+ "last_price": 40281.0,
  "history_last": "2026-11-21 04:59",
- "live_minutes_added": 755,
+ "live_minutes_added": 785,
  "live": {
   "日盤": {
    "symbol": "TXFL6-F",
@@ -18,16 +18,16 @@
   "夜盤": {
    "symbol": "TXFL6-M",
    "name": "臺指期126",
-   "last": 39942.0,
+   "last": 40281.0,
    "ref": 36659.0,
    "date": "20261123",
-   "last_minute": "2026-11-23 22:36",
-   "minutes": 457
+   "last_minute": "2026-11-23 23:06",
+   "minutes": 487
   }
  },
  "v3": {
-  "bar": "2026-11-23 22:00",
-  "bar_end": "23:00",
+  "bar": "2026-11-23 23:00",
+  "bar_end": "00:00",
   "forming": true,
   "pos": null,
   "sig": null,
@@ -37,46 +37,46 @@
      {
       "name": "可進場時段",
       "ok": true,
-      "detail": "22:00 這根"
+      "detail": "23:00 這根"
      },
      {
       "name": "趨勢 EMA20 > EMA60",
       "ok": false,
-      "detail": "36,893 / 37,593"
+      "detail": "37,247 / 37,693"
      }
     ],
     "突破": [
      {
       "name": "紅K 實體 ≥ 高低差一半",
-      "ok": true,
-      "detail": "實體 +1,164、高低差 2,257"
+      "ok": false,
+      "detail": "實體 -21、高低差 57"
      },
      {
       "name": "實體 ≥ 0.8 ATR",
-      "ok": true,
-      "detail": "需 607 點"
+      "ok": false,
+      "detail": "需 692 點"
      },
      {
       "name": "收盤站上布林上軌",
       "ok": true,
-      "detail": "上軌 39,103"
+      "detail": "上軌 39,900"
      },
      {
       "name": "MACD 柱翻正",
       "ok": true,
-      "detail": "+462.7"
+      "detail": "+552.0"
      }
     ],
     "拉回": [
      {
       "name": "紅K 實體 ≥ 高低差一半",
-      "ok": true,
+      "ok": false,
       "detail": ""
      },
      {
       "name": "低點碰到 EMA20",
       "ok": false,
-      "detail": "EMA20 36,893"
+      "detail": "EMA20 37,247"
      },
      {
       "name": "收盤站回 EMA20",
@@ -85,19 +85,19 @@
      },
      {
       "name": "收盤過前一根高點",
-      "ok": true,
-      "detail": "38,813"
+      "ok": false,
+      "detail": "40,324"
      },
      {
       "name": "EMA60 比 5 根前高",
       "ok": true,
-      "detail": "+43"
+      "detail": "+167"
      }
     ],
     "stop": {
-     "ok": false,
-     "stop": 38643.84473018908,
-     "raw": 1961.5436846540615
+     "ok": true,
+     "stop": 39877.154321249,
+     "raw": 94.76913575019717
     }
    },
    "空": {
@@ -105,34 +105,34 @@
      {
       "name": "可進場時段",
       "ok": true,
-      "detail": "22:00 這根"
+      "detail": "23:00 這根"
      },
      {
       "name": "趨勢 EMA20 < EMA60",
       "ok": true,
-      "detail": "36,893 / 37,593"
+      "detail": "37,247 / 37,693"
      }
     ],
     "突破": [
      {
       "name": "黑K 實體 ≥ 高低差一半",
       "ok": false,
-      "detail": "實體 +1,164、高低差 2,257"
+      "detail": "實體 -21、高低差 57"
      },
      {
       "name": "實體 ≥ 0.8 ATR",
       "ok": false,
-      "detail": "需 607 點"
+      "detail": "需 692 點"
      },
      {
       "name": "收盤跌破布林下軌",
       "ok": false,
-      "detail": "下軌 33,372"
+      "detail": "下軌 33,014"
      },
      {
       "name": "MACD 柱翻負",
       "ok": false,
-      "detail": "+462.7"
+      "detail": "+552.0"
      }
     ],
     "拉回": [
@@ -144,7 +144,7 @@
      {
       "name": "高點碰到 EMA20",
       "ok": true,
-      "detail": "EMA20 36,893"
+      "detail": "EMA20 37,247"
      },
      {
       "name": "收盤壓回 EMA20",
@@ -154,18 +154,18 @@
      {
       "name": "收盤破前一根低點",
       "ok": false,
-      "detail": "36,280"
+      "detail": "38,067"
      },
      {
       "name": "EMA60 比 5 根前低",
       "ok": false,
-      "detail": "+43"
+      "detail": "+167"
      }
     ],
     "stop": {
      "ok": true,
-     "stop": 40410.54368465406,
-     "raw": 468.5436846540615
+     "stop": 40684.845678751,
+     "raw": 123.76913575019717
     }
    }
   },
@@ -369,11 +369,11 @@
   },
   "events": [],
   "levels": {
-   "E20": 36893,
-   "E60": 37593,
-   "ATR": 865,
-   "BBU": 39103,
-   "BBL": 33372
+   "E20": 37247,
+   "E60": 37693,
+   "ATR": 808,
+   "BBU": 39900,
+   "BBL": 33014
   }
  }
 }
