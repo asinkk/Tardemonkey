@@ -1,9 +1,7 @@
 name: 累積台指期 1 分K
 
 on:
-  schedule:
-    # 台北時間週一到週六 06:32（夜盤收盤後）。期交所只保留 30 個交易日，所以每天存一次。
-    - cron: "32 22 * * 0-5"
+  # 2026-11-24 起改在 Monkey 的 Windows 電腦每天 06:32 跑（windows/run_live.ps1 -Daily），GitHub 不再排程，只留手動觸發當備用。
   workflow_dispatch: {}
 
 permissions:
