@@ -20,6 +20,9 @@ jobs:
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v5
+        with:
+          # 排隊等 concurrency 的期間 main 可能已經有新 commit，從最新的開始算，免得推的時候衝突
+          ref: ${{ github.ref_name }}
       - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
@@ -41,7 +44,8 @@ jobs:
           git diff --cached --quiet && exit 0
           git commit -m "累積台指期 1 分K、台指選擇權逐筆 $(TZ=Asia/Taipei date '+%F')"
           for i in 1 2 3 4 5; do
-            if git pull --rebase origin main && git push; then exit 0; fi
+            # 產生的網頁／json 衝突時用這次剛算的（-X theirs 在 rebase 時指自己的 commit）
+            if git pull --rebase -X theirs origin main && git push; then exit 0; fi
             git rebase --abort 2>/dev/null || true
             sleep $((i * 5))
           done
