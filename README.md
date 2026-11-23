@@ -26,5 +26,6 @@ python strategy/live.py --out /tmp/x --offline  # 只用 history
 排程：
 - 即時訊號頁：在 Windows 電腦用工作排程器跑 `windows/run_live.ps1`，交易時段每半小時（日盤台北 :20/:50，夜盤 :06/:36），
   算完推回 GitHub。安裝見 `windows/README.md`。`strategy-live.yml` 只留手動觸發當備用。
-- `tx-ticks.yml`（GitHub Actions）：每天台北 06:32 存期交所 1 分K 與台指選擇權逐筆（期交所只留 30 個交易日）、跑前測與即時訊號頁。
+- 每天收資料：同一台電腦週一到週六台北 06:32 跑 `windows/run_live.ps1 -Daily`，存期交所 1 分K 與台指選擇權逐筆（期交所只留 30 個交易日）、跑前測與即時訊號頁。
+  `tx-ticks.yml` 只留手動觸發當備用。GitHub Actions 上已經沒有任何排程。
 - 原本的排程鬧鐘 `clock.yml`（長時間 job 一路交棒）已移除：原版 txo-dashboard 用同樣做法被 GitHub 以違反 ToS 停用。
