@@ -23,7 +23,8 @@ python strategy/live.py --out /tmp/x --offline  # 只用 history
 
 網頁：https://asinkk.github.io/Tardemonkey/live.html（Settings → Pages 設 main 分支的 /docs）
 
-排程（GitHub Actions，時間可能晚 5–30 分鐘或漏跑）：
-- `strategy-live.yml`：交易時段每半小時更新即時訊號頁（日盤台北 :20/:50，夜盤 :06/:36）。
-- `tx-ticks.yml`：每天台北 06:32 存期交所 1 分K 與台指選擇權逐筆（期交所只留 30 個交易日）、跑前測與即時訊號頁。
-- `clock.yml`（排程鬧鐘）：GitHub 的 schedule 常延誤，鬧鐘在長時間 job 裡照上面兩個 workflow 的 cron 準時觸發它們。
+排程：
+- 即時訊號頁：在 Windows 電腦用工作排程器跑 `windows/run_live.ps1`，交易時段每半小時（日盤台北 :20/:50，夜盤 :06/:36），
+  算完推回 GitHub。安裝見 `windows/README.md`。`strategy-live.yml` 只留手動觸發當備用。
+- `tx-ticks.yml`（GitHub Actions）：每天台北 06:32 存期交所 1 分K 與台指選擇權逐筆（期交所只留 30 個交易日）、跑前測與即時訊號頁。
+- 原本的排程鬧鐘 `clock.yml`（長時間 job 一路交棒）已移除：原版 txo-dashboard 用同樣做法被 GitHub 以違反 ToS 停用。
