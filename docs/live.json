@@ -1,10 +1,10 @@
 {
- "generated": "2026-11-24 15:36",
- "prev_generated": "2026-11-24 15:06",
+ "generated": "2026-11-24 19:36",
+ "prev_generated": "2026-11-24 19:26",
  "gap": [],
- "last_price": 40584.0,
- "history_last": "2026-11-24 04:59",
- "live_minutes_added": 208,
+ "last_price": 39584.0,
+ "history_last": "2026-11-24 13:44",
+ "live_minutes_added": 276,
  "live": {
   "日盤": {
    "symbol": "TXFL6-F",
@@ -18,16 +18,16 @@
   "夜盤": {
    "symbol": "TXFL6-M",
    "name": "臺指期126",
-   "last": 40584.0,
+   "last": 39590.0,
    "ref": 40324.0,
    "date": "20261124",
-   "last_minute": "2026-11-24 15:36",
-   "minutes": 37
+   "last_minute": "2026-11-24 19:35",
+   "minutes": 276
   }
  },
  "v3": {
-  "bar": "2026-11-24 15:00",
-  "bar_end": "16:00",
+  "bar": "2026-11-24 19:00",
+  "bar_end": "20:00",
   "forming": true,
   "pos": null,
   "sig": null,
@@ -37,34 +37,34 @@
      {
       "name": "可進場時段",
       "ok": false,
-      "detail": "15:00 這根"
+      "detail": "19:00 這根"
      },
      {
       "name": "趨勢 EMA20 > EMA60",
       "ok": true,
-      "detail": "39,247 / 38,466"
+      "detail": "39,437 / 38,639"
      }
     ],
     "突破": [
      {
       "name": "紅K 實體 ≥ 高低差一半",
       "ok": false,
-      "detail": "實體 -188、高低差 483"
+      "detail": "實體 -20、高低差 300"
      },
      {
       "name": "實體 ≥ 0.8 ATR",
       "ok": false,
-      "detail": "需 392 點"
+      "detail": "需 407 點"
      },
      {
       "name": "收盤站上布林上軌",
       "ok": false,
-      "detail": "上軌 42,290"
+      "detail": "上軌 41,912"
      },
      {
       "name": "MACD 柱翻正",
-      "ok": true,
-      "detail": "+71.5"
+      "ok": false,
+      "detail": "-150.8"
      }
     ],
     "拉回": [
@@ -75,8 +75,8 @@
      },
      {
       "name": "低點碰到 EMA20",
-      "ok": false,
-      "detail": "EMA20 39,247"
+      "ok": true,
+      "detail": "EMA20 39,437"
      },
      {
       "name": "收盤站回 EMA20",
@@ -85,19 +85,19 @@
      },
      {
       "name": "收盤過前一根高點",
-      "ok": true,
-      "detail": "40,324"
+      "ok": false,
+      "detail": "39,988"
      },
      {
       "name": "EMA60 比 5 根前高",
       "ok": true,
-      "detail": "+347"
+      "detail": "+244"
      }
     ],
     "stop": {
      "ok": true,
-     "stop": 40281.028898592675,
-     "raw": 302.9711014073255
+     "stop": 39286.5805094564,
+     "raw": 297.41949054360157
     }
    },
    "空": {
@@ -105,34 +105,34 @@
      {
       "name": "可進場時段",
       "ok": false,
-      "detail": "15:00 這根"
+      "detail": "19:00 這根"
      },
      {
       "name": "趨勢 EMA20 < EMA60",
       "ok": false,
-      "detail": "39,247 / 38,466"
+      "detail": "39,437 / 38,639"
      }
     ],
     "突破": [
      {
       "name": "黑K 實體 ≥ 高低差一半",
       "ok": false,
-      "detail": "實體 -188、高低差 483"
+      "detail": "實體 -20、高低差 300"
      },
      {
       "name": "實體 ≥ 0.8 ATR",
       "ok": false,
-      "detail": "需 392 點"
+      "detail": "需 407 點"
      },
      {
       "name": "收盤跌破布林下軌",
       "ok": false,
-      "detail": "下軌 35,889"
+      "detail": "下軌 37,521"
      },
      {
       "name": "MACD 柱翻負",
-      "ok": false,
-      "detail": "+71.5"
+      "ok": true,
+      "detail": "-150.8"
      }
     ],
     "拉回": [
@@ -144,7 +144,7 @@
      {
       "name": "高點碰到 EMA20",
       "ok": true,
-      "detail": "EMA20 39,247"
+      "detail": "EMA20 39,437"
      },
      {
       "name": "收盤壓回 EMA20",
@@ -154,18 +154,18 @@
      {
       "name": "收盤破前一根低點",
       "ok": false,
-      "detail": "40,324"
+      "detail": "39,431"
      },
      {
       "name": "EMA60 比 5 根前低",
       "ok": false,
-      "detail": "+347"
+      "detail": "+244"
      }
     ],
     "stop": {
      "ok": true,
-     "stop": 40861.971101407325,
-     "raw": 277.9711014073255
+     "stop": 39831.09745271802,
+     "raw": 101.41949054360157
     }
    }
   },
@@ -369,11 +369,11 @@
   },
   "events": [],
   "levels": {
-   "E20": 39247,
-   "E60": 38466,
-   "ATR": 490,
-   "BBU": 42290,
-   "BBL": 35889
+   "E20": 39437,
+   "E60": 38639,
+   "ATR": 494,
+   "BBU": 41912,
+   "BBL": 37521
   }
  }
 }
