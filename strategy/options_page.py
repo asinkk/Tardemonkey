@@ -122,7 +122,8 @@ function alloc(S, n) {
 // 從價格軌跡 env 算：限價停利何時成交、回吐出場何時觸發
 function tpFill(x, m) {
   const tg = roundTick(x.entry * m), e = (x.env || []).find((v) => v[1] >= tg);
-  return {target: tg, when: e ? e[0] : null};
+  // 試算表的紀錄沒有完整價格軌跡：3/5/10 倍看它記下的成交時間 fills
+  return {target: tg, when: e ? e[0] : (x.fills && x.fills[m]) || null};
 }
 function trailExit(x, arm, back) {
   const armPx = roundTick(x.entry * arm);
@@ -131,6 +132,7 @@ function trailExit(x, arm, back) {
     const hit = lows.find((v) => v[1] <= pk * (1 - back));
     if (hit) return {armPx, t: hit[0], px: hit[1]};
   }
+  if (x.trail && x.trail.t && arm === R.arm && back === R.back) return {armPx, t: x.trail.t, px: x.trail.px};
   return {armPx, t: null};
 }
 
@@ -295,11 +297,12 @@ def render(d, now):
     data = json.dumps(d, ensure_ascii=False, default=str).replace("</", "<\\/")
     return f"""<!doctype html>
 <html lang="zh-Hant"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<meta http-equiv="refresh" content="600">
+<meta http-equiv="refresh" content="1800">
+<meta name="tm-page" content="options"><meta name="tm-generated" content="{now:%Y-%m-%d %H:%M}">
 <title>週選即時訊號</title>
 <style>{CSS}</style></head><body><main>
 <div class="top"><div><h1>週選即時訊號</h1>
-<p class="asof">v3 60 分K（限時段）出訊號時買同方向週選・台北 {now:%Y-%m-%d %H:%M} 更新・逐筆成交資料到 {d["ticks_to"] or "（還沒有）"}</p></div>
+<p class="asof" id="hdr-asof">v3 60 分K（限時段）出訊號時買同方向週選・台北 {now:%Y-%m-%d %H:%M} 更新・逐筆成交資料到 {d["ticks_to"] or "（還沒有）"}</p></div>
 <div class="lots"><label for="lots">口數</label><input id="lots" type="number" min="1" max="99" step="1" value="10" inputmode="numeric"></div></div>
 <section class="card pick"><div class="row"><label for="target">權利金</label><select id="target"></select>
 <label for="scheme">停利方案</label><select id="scheme"></select></div>
@@ -342,5 +345,6 @@ def render(d, now):
 </main>
 <script id="data" type="application/json">{data}</script>
 <script>{JS}</script>
+<script src="sheet.js"></script>
 </body></html>
 """

@@ -1,5 +1,9 @@
 # 在 Windows 電腦跑即時訊號
 
+> **2026-11-24 起停用**：網頁改成打開時從 Google 試算表抓資料（`docs/sheet.js`、`gsheet/web.gs`），
+> 電腦上的 Tardemonkey-* 工作排程已全部停用（Disable，沒有刪除），GitHub 不再有自動 commit。
+> 想恢復：PowerShell 執行 `Get-ScheduledTask -TaskName 'Tardemonkey*' | Enable-ScheduledTask`。
+
 2026-11-24 起，交易時段每半小時的即時訊號改在這台電腦跑，不再用 GitHub Actions 排程
 （原版 txo-dashboard 因為排程鬧鐘與高頻排程被 GitHub 以違反 ToS 停用）。
 每天 06:32 的資料收集也在這台電腦跑（`run_live.ps1 -Daily`），GitHub 上已經沒有排程。

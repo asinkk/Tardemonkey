@@ -521,7 +521,8 @@ def render(d, now):
     night_win = "21:00–23:00" if dst else "22:00–00:00"
     return f"""<!doctype html>
 <html lang="zh-Hant"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<meta http-equiv="refresh" content="600">
+<meta http-equiv="refresh" content="1800">
+<meta name="tm-page" content="live"><meta name="tm-generated" content="{d['generated']}">
 <title>台指策略即時訊號</title>
 <style>
 :root {{ --bg:#f6f7f9; --panel:#fff; --fg:#1b1f24; --muted:#5d6673; --line:#dfe3e8; --up:#c2412d; --dn:#2f7d5b;
@@ -569,22 +570,21 @@ a {{ color:var(--accent); }}
 footer {{ margin:20px 0 40px; }}
 </style></head><body><main>
 <div class="top"><div><h1>台指策略即時訊號</h1>
-<p class="asof">{esc(sess)}・網頁產生於台北 {esc(d['generated'])}（<span id="age">—</span>）</p></div>
-<div style="text-align:right"><p class="price">{d['last_price']:,.0f}</p><p class="asof">台指期近月（日盤＋夜盤）・資料到 {esc(src)}</p></div></div>
+<p class="asof" id="hdr-asof">{esc(sess)}・網頁產生於台北 {esc(d['generated'])}（<span id="age">—</span>）</p></div>
+<div style="text-align:right"><p class="price" id="price">{d['last_price']:,.0f}</p><p class="asof" id="price-src">台指期近月（日盤＋夜盤）・資料到 {esc(src)}</p></div></div>
 <p class="sub"><a href="options.html">週選即時訊號（訊號出現時買哪一檔、怎麼分批停利）→</a></p>
 <p class="alert" id="stale" hidden></p>
 {gap}{errs}
-<div class="cols">
+<div class="cols" id="v3card">
 {strat_card("v3・60 分K（限時段）", f"60 分K 收完才看訊號；日盤 08:45–11:45、夜盤 {night_win} 開始的 K 才開新倉", d["v3"], d["prev_generated"][5:])}
 </div>
-<div class="cols">
+<div class="cols" id="v3rec">
 {record_html("v3（限時段）模擬交易紀錄", d["v3"]["record"])}
 </div>
 <footer>
-<p class="note">GitHub Actions 在交易時段大約每 30 分鐘更新一次：日盤台北 08:50–13:50（:20、:50），
-夜盤 15:06–05:06（:06、:36）。GitHub 的排程是盡力而為，常晚 5–30 分鐘，偶爾會漏跑，所以請看上面的「資料到」時間，不要拿這頁當下單依據。
-每次更新都從期交所重新抓整個日盤、夜盤的 1 分K，從頭重算 K 棒、部位與停損，所以中間漏跑幾次不會漏掉 K 棒，也不會漏掉停損；
-晚到的進出場會在卡片上標「上次更新之後」並寫晚了幾分鐘。每天 06:32 的存檔若漏跑，下一次更新發現缺盤會自動去期交所補抓。</p>
+<p class="note">這頁打開時會去 Google 試算表抓最新結果（試算表的 Apps Script 定時自己跟期交所抓 1 分K、算 v3），網頁開著每 5 分鐘再抓一次，
+所以 GitHub 不用一直 commit。試算表抓不到時顯示網頁裡內建的資料，上方會標明資料時間。請看「資料到」時間，不要拿這頁當下單依據。
+每次計算都從頭重算 K 棒、部位與停損，所以中間漏跑幾次不會漏掉 K 棒，也不會漏掉停損。</p>
 <p class="note">「形成中」表示那根 K 還沒收完，條件是用現價先算，收K前都可能變。訊號要等 60 分K 收完、下一根開盤才進場。
 試算：本金 20 萬、1 口微台（每點 10 元）、每次下單 25 元；R 是以初始停損點數為 1 的倍數。</p>
 <p class="note"><b>資料：訊號、部位、停損都只用台指期近月（TX）日盤＋夜盤 60 分K</b>：期交所每筆成交轉 1 分K（history 到 {esc(d['history_last'])}）＋期交所即時 1 分K。
@@ -609,6 +609,7 @@ footer {{ margin:20px 0 40px; }}
   }}
 }})();
 </script>
+<script src="sheet.js"></script>
 </body></html>
 """
 
