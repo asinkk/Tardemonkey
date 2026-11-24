@@ -19,4 +19,5 @@ powershell -NoProfile -ExecutionPolicy Bypass -File windows\install_task.ps1
 注意：
 - `tardemonkey-live` 資料夾專門給排程用，每次跑都會先對齊 GitHub 最新 main，本機修改會被蓋掉。
 - 電腦要開著（睡眠時會嘗試喚醒；關機時錯過的那次開機後補跑一次）。
+- 只有訊號、部位或週選紀錄有變才推上 GitHub（`should_push.py`），每個盤收盤那次（13:50、05:06）一定推一次；平常一天大約 3 次 commit。
 - 紀錄在 `windows\logs\live-YYYY-MM.log`（每天收資料是 `daily-YYYY-MM.log`）。
