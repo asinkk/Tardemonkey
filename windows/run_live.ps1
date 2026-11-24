@@ -1,4 +1,5 @@
-﻿# 即時訊號：抓期交所即時 1 分K、算 v3（限時段），有變動就推回 GitHub。
+﻿# 即時訊號：抓期交所即時 1 分K、算 v3（限時段），訊號或部位有變才推回 GitHub（windows/should_push.py 判斷）。
+# 為了少 commit：現價、條件明細的變動不推；每個盤收盤那次（13:50、05:06）一定推一次，讓網頁有收盤狀態。
 # 由工作排程器每半小時叫一次（install_task.ps1 會設好）。手動試跑：
 #   powershell -NoProfile -ExecutionPolicy Bypass -File windows\run_live.ps1
 # 加 -Daily：每天 06:32 收資料（原本 GitHub 的 tx-ticks.yml）：存期交所 1 分K、台指選擇權逐筆、跑 v3 前測，再算即時訊號。
@@ -42,6 +43,13 @@ try {
         if ($rc -ne 0) { Log 'forward.py 失敗'; exit 1 }
     }
     if ((Run $py ($pyArgs + @('strategy/live.py', '--out', 'docs'))) -ne 0) { Log 'live.py 失敗'; exit 1 }
+    if (-not $Daily) {
+        $now = Get-Date
+        $m = $now.Hour * 60 + $now.Minute
+        $closing = ($m -ge 13 * 60 + 45 -and $m -lt 14 * 60 + 30) -or ($m -ge 5 * 60 -and $m -lt 5 * 60 + 45)
+        if (-not $closing -and (Run $py ($pyArgs + @('windows/should_push.py'))) -ne 0) { $code = 0; exit 0 }
+        if ($closing) { Log '收盤這次一定推' }
+    }
     Run git (@('add') + $files) | Out-Null
     & git diff --cached --quiet
     if ($LASTEXITCODE -eq 0) { Log '沒有變動'; $code = 0; exit 0 }
