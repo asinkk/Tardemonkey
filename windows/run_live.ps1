@@ -19,6 +19,9 @@ function Run([string]$exe, [string[]]$argv) {
     return $LASTEXITCODE
 }
 
+# 這個資料夾在用本機版（local/server.py）時，不能 reset，不然還沒存到 GitHub 的資料會被蓋掉
+if (Test-Path (Join-Path $repo 'local\state.json')) { Log '這個資料夾正在用本機版（local\state.json 存在），舊排程不跑'; exit 0 }
+
 # 同時只跑一個（上一次卡住超過 40 分鐘就不管它）
 $lock = Join-Path $logDir 'running.lock'
 if ((Test-Path $lock) -and (Get-Item $lock).LastWriteTime -gt (Get-Date).AddMinutes(-40)) { Log '上一次還在跑，這次跳過'; exit 0 }
