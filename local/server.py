@@ -3,10 +3,13 @@
 雙擊 repo 根目錄的「啟動交易猩猩.bat」就會：
   1. 在 http://127.0.0.1:8765 開一個只有這台電腦看得到的網頁伺服器，顯示 docs/ 裡的網頁
      （即時訊號、成交紀錄、週選、前測），每頁下方多一條本機工具列。
-  2. 交易時段（日盤 08:45–13:45、夜盤 15:00–05:00）每 LIVE_MIN 分鐘自己跑一次 strategy/live.py。
+  2. 交易時段（日盤 08:45–13:45、夜盤 15:00–05:00）每 N 分鐘自己跑一次 strategy/live.py
+     （N 在工具列「⚙ 設定」調，預設 10）。
   3. 週一到週六 06:32 收資料：期交所 1 分K、台指選擇權逐筆（期交所只留 30 個交易日）、v3 前測。
      06:32 電腦沒開的話，之後一打開就補收。
-  4. 不會自己 commit / push。要存到 GitHub 時按工具列的「存到 GitHub」，或雙擊「存到GitHub.bat」。
+  4. 預設不會自己 commit / push。要存到 GitHub 時按工具列的「存到 GitHub」，或雙擊「存到GitHub.bat」。
+     「⚙ 設定」可以打開自動上傳：最少隔 2 小時、資料有變才推、一天最多 AUTO_SAVE_MAX_PER_DAY 次。
+  設定存在 local/state.json（不會推上 GitHub）。
 
 只用 Python 標準函式庫。指令：
   python local/server.py            啟動（預設會開瀏覽器）
@@ -20,11 +23,15 @@ REPO = os.path.dirname(HERE)
 DOCS = os.path.join(REPO, "docs")
 LOGS = os.path.join(HERE, "logs")
 STATE = os.path.join(HERE, "state.json")
-LIVE_MIN = 10                 # 交易時段多久算一次即時訊號（本機不 commit，可以比 GitHub 版勤）
+LIVE_MIN_CHOICES = [5, 10, 15, 20, 30, 60]   # 交易時段多久算一次即時訊號（分鐘）；最短 5 分鐘，免得太常敲期交所
+AUTO_SAVE_HOURS_CHOICES = [2, 3, 4, 6, 12, 24]  # 自動上傳最短間隔（小時）；最短 2 小時
+AUTO_SAVE_MAX_PER_DAY = 6     # 自動上傳一天最多幾次（不管間隔設多短）
+DEFAULTS = {"live_min": 10, "auto_save": False, "auto_save_hours": 6}
 DAILY_AT = (6, 32)            # 每天收資料的時間（週一到週六）
 SAVE_PATHS = ["history", "docs"]
 
 lock = threading.Lock()       # 同時只跑一個工作
+state_lock = threading.Lock()
 status = {"live_ts": 0.0, "job": "", "job_started": "", "last": {}, "next_live": "", "dirty": None, "dirty_at": 0}
 
 
@@ -48,9 +55,60 @@ def load_state():
 
 
 def save_state(**kw):
+    with state_lock:
+        s = load_state()
+        s.update(kw)
+        tmp = STATE + ".tmp"
+        with open(tmp, "w", encoding="utf-8") as f:
+            json.dump(s, f, ensure_ascii=False, indent=1)
+        os.replace(tmp, STATE)
+
+
+def settings():
+    """目前的設定（不合法的值一律退回預設）。"""
     s = load_state()
-    s.update(kw)
-    json.dump(s, open(STATE, "w", encoding="utf-8"), ensure_ascii=False, indent=1)
+    out = dict(DEFAULTS)
+    if s.get("live_min") in LIVE_MIN_CHOICES:
+        out["live_min"] = s["live_min"]
+    if isinstance(s.get("auto_save"), bool):
+        out["auto_save"] = s["auto_save"]
+    if s.get("auto_save_hours") in AUTO_SAVE_HOURS_CHOICES:
+        out["auto_save_hours"] = s["auto_save_hours"]
+    return out
+
+
+def update_settings(d):
+    kw = {}
+    try:
+        if "live_min" in d:
+            v = int(d["live_min"])
+            if v not in LIVE_MIN_CHOICES:
+                return False, f"更新頻率只能選 {LIVE_MIN_CHOICES} 分鐘"
+            kw["live_min"] = v
+        if "auto_save_hours" in d:
+            v = int(d["auto_save_hours"])
+            if v not in AUTO_SAVE_HOURS_CHOICES:
+                return False, f"自動上傳間隔只能選 {AUTO_SAVE_HOURS_CHOICES} 小時"
+            kw["auto_save_hours"] = v
+        if "auto_save" in d:
+            kw["auto_save"] = d["auto_save"] is True
+    except (TypeError, ValueError):
+        return False, "設定格式不對"
+    if not kw:
+        return False, "沒有要改的設定"
+    old = settings()
+    save_state(**kw)
+    new = settings()
+    changes = []
+    if new["live_min"] != old["live_min"]:
+        changes.append(f"更新頻率 {old['live_min']} → {new['live_min']} 分鐘")
+    if new["auto_save"] != old["auto_save"]:
+        changes.append("自動上傳 " + ("打開" if new["auto_save"] else "關閉"))
+    if new["auto_save_hours"] != old["auto_save_hours"]:
+        changes.append(f"自動上傳間隔 {old['auto_save_hours']} → {new['auto_save_hours']} 小時")
+    if changes:
+        log("設定變更：" + "、".join(changes))
+    return True, "已儲存設定" + ("：" + "、".join(changes) if changes else "（沒有變動）")
 
 
 def run(argv, cwd=REPO, timeout=1800):
@@ -120,7 +178,7 @@ def ensure_main():
     return None
 
 
-def job_save():
+def job_save(auto=False):
     err = ensure_main()
     if err:
         return False, err
@@ -128,7 +186,7 @@ def job_save():
     rc, _ = git("diff", "--cached", "--quiet")
     if rc == 0:
         return True, "沒有新的資料要存，GitHub 上已經是最新"
-    msg = f"本機資料 {now():%Y-%m-%d %H:%M}（手動存）"
+    msg = f"本機資料 {now():%Y-%m-%d %H:%M}（{'自動存' if auto else '手動存'}）"
     rc, out = git("-c", "user.name=txo-bot", "-c", "user.email=txo-bot@users.noreply.github.com", "commit", "-q", "-m", msg)
     if rc != 0:
         return False, "commit 失敗：" + out[-300:]
@@ -140,11 +198,22 @@ def job_save():
     rc, out = git("push", "-q", "origin", "HEAD:main")
     if rc != 0:
         return False, "推上 GitHub 失敗（資料已在本機 commit，沒有遺失，可以晚點再按一次）：" + out[-300:]
-    save_state(saved_at=f"{now():%Y-%m-%d %H:%M}")
+    save_state(saved_at=f"{now():%Y-%m-%d %H:%M}", saved_ts=time.time())
+    if auto:
+        c = load_state().get("auto_saves") or {}
+        today = f"{now():%Y-%m-%d}"
+        save_state(auto_saves={"date": today, "n": (c.get("n", 0) if c.get("date") == today else 0) + 1})
     return True, "已存到 GitHub：" + msg
 
 
-JOBS = {"live": ("更新即時訊號", job_live), "daily": ("收期交所資料", job_daily), "save": ("存到 GitHub", job_save)}
+def job_autosave():
+    save_state(auto_try_ts=time.time())     # 失敗也要等下一個間隔才再試，不會一直重推
+    return job_save(auto=True)
+
+
+JOBS = {"live": ("更新即時訊號", job_live), "daily": ("收期交所資料", job_daily), "save": ("存到 GitHub", job_save),
+        "autosave": ("自動存到 GitHub", job_autosave)}
+MANUAL_JOBS = ("live", "daily", "save")
 
 
 def do(name, why=""):
@@ -182,6 +251,26 @@ def in_session(t):
     return day or night
 
 
+def auto_saves_today(t):
+    c = load_state().get("auto_saves") or {}
+    return c.get("n", 0) if c.get("date") == f"{t:%Y-%m-%d}" else 0
+
+
+def autosave_due(t, cfg):
+    """自動上傳：有打開、距離上次上傳（手動或自動）超過間隔、今天還沒到上限、而且資料真的有變才推。"""
+    if not cfg["auto_save"]:
+        return False
+    st = load_state()
+    since = time.time() - max(st.get("auto_try_ts", 0), st.get("saved_ts", 0))
+    if since < cfg["auto_save_hours"] * 3600:
+        return False
+    if auto_saves_today(t) >= AUTO_SAVE_MAX_PER_DAY:
+        return False
+    if status["dirty_at"] < time.time() - 60:
+        status["dirty"], status["dirty_at"] = dirty_files(), time.time()
+    return bool(status["dirty"])
+
+
 def daily_due(t):
     return t.weekday() <= 5 and (t.hour, t.minute) >= DAILY_AT and load_state().get("daily_done") != f"{t:%Y-%m-%d}"
 
@@ -191,15 +280,18 @@ def scheduler():
     while True:
         t = now()
         try:
+            cfg = settings()
             if daily_due(t):
                 if do("daily", "每天 06:32 收資料"):
                     if not status["last"]["daily"]["ok"]:
                         time.sleep(600)          # 期交所還沒好之類的，10 分鐘後再試
-            elif in_session(t) and time.time() - status["live_ts"] >= LIVE_MIN * 60 - 5:
+            elif in_session(t) and time.time() - status["live_ts"] >= cfg["live_min"] * 60 - 5:
                 do("live", "交易時段定時")
+            elif autosave_due(t, cfg):
+                do("autosave", f"每 {cfg['auto_save_hours']} 小時、資料有變")
             nxt = ""
             if in_session(t):
-                nxt = (dt.datetime.fromtimestamp(max(status["live_ts"] + LIVE_MIN * 60, time.time()))).strftime("%H:%M")
+                nxt = (dt.datetime.fromtimestamp(max(status["live_ts"] + cfg["live_min"] * 60, time.time()))).strftime("%H:%M")
             status["next_live"] = nxt
         except Exception as e:
             log(f"排程出錯：{e}")
@@ -215,6 +307,7 @@ TYPES = {".html": "text/html; charset=utf-8", ".js": "application/javascript; ch
 
 def status_json():
     st = load_state()
+    cfg = settings()
     if status["dirty_at"] < time.time() - 60 and not lock.locked():
         status["dirty"], status["dirty_at"] = dirty_files(), time.time()
     gen = ""
@@ -224,7 +317,18 @@ def status_json():
         pass
     return {"job": status["job"], "job_started": status["job_started"], "last": status["last"], "next_live": status["next_live"],
             "in_session": in_session(now()), "generated": gen, "daily_done": st.get("daily_done", ""),
-            "saved_at": st.get("saved_at", ""), "dirty": status["dirty"], "live_min": LIVE_MIN}
+            "saved_at": st.get("saved_at", ""), "dirty": status["dirty"], "live_min": cfg["live_min"],
+            "settings": cfg, "choices": {"live_min": LIVE_MIN_CHOICES, "auto_save_hours": AUTO_SAVE_HOURS_CHOICES},
+            "auto_save_max": AUTO_SAVE_MAX_PER_DAY, "auto_saves_today": auto_saves_today(now()), "next_auto_save": next_auto_save(cfg, st)}
+
+
+def next_auto_save(cfg, st):
+    if not cfg["auto_save"]:
+        return ""
+    if auto_saves_today(now()) >= AUTO_SAVE_MAX_PER_DAY:
+        return "明天"
+    last = max(st.get("auto_try_ts", 0), st.get("saved_ts", 0))
+    return dt.datetime.fromtimestamp(max(last + cfg["auto_save_hours"] * 3600, time.time())).strftime("%m/%d %H:%M")
 
 
 class Handler(http.server.BaseHTTPRequestHandler):
@@ -270,9 +374,18 @@ class Handler(http.server.BaseHTTPRequestHandler):
         # 只接受本機工具列發的（自訂標頭讓別的網站沒辦法偷按）
         if self.headers.get("X-Tardemonkey") != "local":
             return self.send(403, "forbidden")
+        path = urllib.parse.urlparse(self.path).path
+        if path == "/__local/settings":
+            try:
+                n = int(self.headers.get("Content-Length") or 0)
+                d = json.loads(self.rfile.read(min(n, 10000)).decode("utf-8") or "{}")
+                ok, m = update_settings(d if isinstance(d, dict) else {})
+            except Exception as e:
+                ok, m = False, f"設定格式不對：{e}"
+            return self.send(200 if ok else 400, json.dumps({"ok": ok, "msg": m, "settings": settings()}, ensure_ascii=False), TYPES[".json"])
         q = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
         name = (q.get("job") or [""])[0]
-        if urllib.parse.urlparse(self.path).path != "/__local/run" or name not in JOBS:
+        if path != "/__local/run" or name not in MANUAL_JOBS:
             return self.send(404, "not found")
         ok = start(name, "手動按")
         self.send(200, json.dumps({"started": ok, "busy": status["job"]}, ensure_ascii=False), TYPES[".json"])
